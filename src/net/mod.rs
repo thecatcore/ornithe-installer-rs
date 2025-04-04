@@ -11,3 +11,17 @@ static CLIENT: LazyLock<Client> = LazyLock::new(|| {
         .build()
         .unwrap()
 });
+
+pub enum GameSide {
+    Client,
+    Server,
+}
+
+impl GameSide {
+    fn id(&self) -> &str {
+        match self {
+            GameSide::Client => "client",
+            GameSide::Server => "server",
+        }
+    }
+}
