@@ -1,0 +1,3 @@
+struct LoaderVersion {
+    version: String,
+}
