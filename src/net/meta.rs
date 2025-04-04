@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use serde::Deserialize;
 use serde_json::Value;
 
 use crate::errors::InstallerError;
@@ -6,10 +9,18 @@ use super::{GameSide, manifest::MinecraftVersion};
 
 const META_URL: &str = "https://meta.ornithemc.net";
 
+#[derive(Deserialize, Clone)]
 pub struct LoaderVersion {
     pub version: String,
+    stable: bool,
+    maven: String,
+    separator: String,
+    build: i32,
+    #[serde(rename(deserialize = "versionNoSide"))]
+    version_no_side: String,
 }
 
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub enum LoaderType {
     Fabric,
     Quilt,
@@ -93,4 +104,57 @@ pub async fn fetch_launch_json(
         }
     }
     Ok(serde_json::to_string_pretty(&text)?)
+}
+
+pub async fn fetch_loader_versions()
+-> Result<HashMap<LoaderType, Vec<LoaderVersion>>, InstallerError> {
+    let mut out = HashMap::new();
+    for loader in [LoaderType::Fabric, LoaderType::Quilt] {
+        let versions = fetch_loader_versions_type(&loader).await?;
+        out.insert(loader, versions);
+    }
+    Ok(out)
+}
+
+async fn fetch_loader_versions_type(
+    loader_type: &LoaderType,
+) -> Result<Vec<LoaderVersion>, InstallerError> {
+    let url = META_URL.to_owned()
+        + "/v3/versions/"
+        + match loader_type {
+            LoaderType::Fabric => "fabric-loader",
+            LoaderType::Quilt => "quilt-loader",
+        };
+    super::CLIENT
+        .get(url)
+        .send()
+        .await?
+        .json::<Vec<LoaderVersion>>()
+        .await
+        .map_err(|e| e.into())
+}
+
+#[derive(Deserialize)]
+pub struct IntermediaryVersion {
+    pub version: String,
+    stable: bool,
+    maven: String,
+    #[serde(rename(deserialize = "versionNoSide"))]
+    version_no_side: String,
+}
+
+pub async fn fetch_intermediary_versions()
+-> Result<HashMap<String, IntermediaryVersion>, InstallerError> {
+    let versions = super::CLIENT
+        .get(META_URL.to_owned() + "/v3/versions/intermediary")
+        .send()
+        .await?
+        .json::<Vec<IntermediaryVersion>>()
+        .await
+        .map_err(|e| Into::<InstallerError>::into(e))?;
+    let mut out = HashMap::with_capacity(versions.len());
+    for ver in versions {
+        out.insert(ver.version.clone(), ver);
+    }
+    Ok(out)
 }

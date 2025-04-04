@@ -1,3 +1,5 @@
+use env_logger::Env;
+
 mod actions;
 mod errors;
 mod net;
@@ -9,10 +11,11 @@ static ORNITHE_ICON_BYTES: &[u8] = include_bytes!("../res/icon.png");
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    env_logger::init_from_env(Env::default().default_filter_or("ornithe_installer_rs=info"));
     if std::env::args().count() > 0 {
         crate::ui::cli::run();
     }
 
-    crate::ui::gui::run();
+    crate::ui::gui::run().await?;
     Ok(())
 }

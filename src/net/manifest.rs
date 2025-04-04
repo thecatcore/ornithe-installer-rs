@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -9,13 +9,14 @@ use super::GameSide;
 const LAUNCHER_META_URL: &str = "https://skyrising.github.io/mc-versions/version_manifest.json";
 const VERSION_META_URL: &str = "https://skyrising.github.io/mc-versions/version/manifest/{}.json";
 
-pub async fn fetch_versions() -> Result<(LatestVersions, Vec<MinecraftVersion>), reqwest::Error> {
+pub async fn fetch_versions() -> Result<VersionManifest, InstallerError> {
     super::CLIENT
         .get(LAUNCHER_META_URL)
         .send()
         .await?
-        .json::<(LatestVersions, Vec<MinecraftVersion>)>()
+        .json::<VersionManifest>()
         .await
+        .map_err(|e| e.into())
 }
 
 pub async fn fetch_launch_json(version: &MinecraftVersion) -> Result<String, InstallerError> {
@@ -85,6 +86,12 @@ async fn fetch_version_details(
 }
 
 #[derive(Deserialize)]
+pub struct VersionManifest {
+    pub latest: LatestVersions,
+    pub versions: Vec<MinecraftVersion>,
+}
+
+#[derive(Deserialize)]
 pub struct LatestVersions {
     old_alpha: String,
     classic_server: String,
@@ -98,10 +105,12 @@ pub struct LatestVersions {
 #[derive(Deserialize, Clone)]
 pub struct MinecraftVersion {
     pub id: String,
-    _type: String,
+    #[serde(rename = "type")]
+    pub _type: String,
     url: String,
-    time: DateTime<Utc>,
-    release_time: DateTime<Utc>,
+    //pub time: DateTime<Utc>, // Not present for 1.2.4, 1.2.3, 1.2.2 and 1.2.1
+    #[serde(rename = "releaseTime")]
+    pub release_time: DateTime<Utc>,
     details: String,
 }
 

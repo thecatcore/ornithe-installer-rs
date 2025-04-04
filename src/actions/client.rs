@@ -55,8 +55,8 @@ pub async fn install(
     create_empty_jar(&vanilla_profile_dir, &vanilla_profile_name);
     create_empty_jar(&profile_dir, &profile_name);
 
-    std::fs::write(vanilla_profile_json, vanilla_launch_json);
-    std::fs::write(profile_json, ornithe_launch_json);
+    let _ = std::fs::write(vanilla_profile_json, vanilla_launch_json);
+    let _ = std::fs::write(profile_json, ornithe_launch_json);
 
     if create_profile {
         update_profiles(location, profile_name, version, loader_type)?;
@@ -115,7 +115,7 @@ fn update_profiles(
                     profiles.insert(new_profile_name, profile);
                 }
 
-                std::fs::write(&launcher_profiles_path, serde_json::to_string(&json)?);
+                let _ = std::fs::write(&launcher_profiles_path, serde_json::to_string(&json)?);
 
                 Ok(())
             }

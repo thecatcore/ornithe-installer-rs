@@ -1,5 +1,8 @@
+use std::fmt::Debug;
+
 use log::error;
 
+#[derive(Debug)]
 pub struct InstallerError(pub String);
 
 impl From<eframe::Error> for InstallerError {
