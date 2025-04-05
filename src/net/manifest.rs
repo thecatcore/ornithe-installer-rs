@@ -85,12 +85,14 @@ async fn fetch_version_details(
         .await
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 pub struct VersionManifest {
     pub latest: LatestVersions,
     pub versions: Vec<MinecraftVersion>,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 pub struct LatestVersions {
     old_alpha: String,
@@ -102,6 +104,7 @@ pub struct LatestVersions {
     pending: String,
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize, Clone)]
 pub struct MinecraftVersion {
     pub id: String,
@@ -124,6 +127,7 @@ impl MinecraftVersion {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Deserialize)]
 pub struct VersionDetails {
     manifests: Vec<VersionDetailsManifest>,
@@ -138,4 +142,33 @@ pub struct VersionDetailsManifest {
     #[serde(rename = "type")]
     _type: String,
     url: String,
+}
+
+pub async fn find_lwjgl_version(version: &MinecraftVersion) -> Result<String, InstallerError> {
+    let details = fetch_version_details(&version).await?;
+    for manifest in details.manifests {
+        let manifest = super::CLIENT
+            .get(manifest.url)
+            .send()
+            .await?
+            .json::<Value>()
+            .await?;
+
+        if let Some(libs) = manifest["libraries"].as_array() {
+            for library in libs {
+                let name = library["name"].clone();
+                if name.is_string() {
+                    let mut name = name.as_str().unwrap().split(":").skip(1);
+                    let artifact = name.next().unwrap();
+                    if artifact == "lwjgl" {
+                        return Ok(name.next().unwrap().to_owned());
+                    }
+                }
+            }
+        }
+    }
+
+    Err(InstallerError(
+        "Unable to find lwjgl version for Minecraft ".to_owned() + &version.id,
+    ))
 }

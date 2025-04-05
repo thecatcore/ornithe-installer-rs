@@ -1,9 +1,10 @@
 use std::{collections::HashMap, path::Path};
 
-use egui::{Button, ComboBox, RichText, Vec2};
+use egui::{Button, ComboBox, RichText, Sense, Vec2};
+use egui_dropdown::DropDownBox;
 use log::{error, info};
 use rfd::{AsyncMessageDialog, FileDialog};
-use tokio::{join, task::JoinHandle};
+use tokio::task::JoinHandle;
 
 use crate::{
     errors::InstallerError,
@@ -19,7 +20,10 @@ pub async fn run() -> anyhow::Result<()> {
     match app {
         Ok(app) => match create_window(app).await {
             Ok(_) => {}
-            Err(e) => display_dialog("Ornithe Installer Error", &e.0),
+            Err(e) => {
+                error!("{}", e.0);
+                display_dialog("Ornithe Installer Error", &e.0)
+            }
         },
         Err(_) => {
             error!("Failed to launch gui!");
@@ -37,7 +41,7 @@ async fn create_window(app: App) -> Result<(), InstallerError> {
     };
 
     eframe::run_native(
-        "Ornithe Installer",
+        &("Ornithe Installer ".to_owned() + crate::VERSION),
         options,
         Box::new(|_cc| Ok(Box::new(app))),
     )?;
@@ -48,6 +52,7 @@ fn display_dialog(title: &str, message: &str) {
     info!("Displaying dialog: {}: {}", title, message);
     let dialog = AsyncMessageDialog::new()
         .set_title(title)
+        .set_level(rfd::MessageLevel::Info)
         .set_description(&message);
     tokio::spawn(async move {
         dialog.show().await;
@@ -58,6 +63,7 @@ struct App {
     mode: Mode,
     selected_minecraft_version: String,
     available_minecraft_versions: Vec<MinecraftVersion>,
+    available_intermediary_versions: Vec<String>,
     show_snapshots: bool,
     selected_loader_type: LoaderType,
     selected_loader_version: String,
@@ -65,19 +71,15 @@ struct App {
     show_betas: bool,
     create_profile: bool,
     install_location: String,
+    output_location: String,
+    copy_generated_location: bool,
     installation_task: Option<JoinHandle<Result<(), InstallerError>>>,
-}
-
-enum Status {
-    Initializing,
-    Loading,
-    Ready,
-    Installing,
 }
 
 impl App {
     async fn create() -> Result<App, InstallerError> {
         let mut available_minecraft_versions = Vec::new();
+        let mut available_intermediary_versions = Vec::new();
         let mut available_loader_versions = HashMap::new();
 
         info!("Loading versions...");
@@ -87,7 +89,9 @@ impl App {
             }
         }
         if let Ok(versions) = net::meta::fetch_intermediary_versions().await {
-            available_minecraft_versions.retain(|v| versions.keys().any(|e| *e == v.id));
+            for v in versions.keys() {
+                available_intermediary_versions.push(v.clone());
+            }
         }
         info!(
             "Loaded {} Minecraft versions",
@@ -100,11 +104,9 @@ impl App {
 
         let app = App {
             mode: Mode::Client,
-            selected_minecraft_version: available_minecraft_versions
-                .get(0)
-                .map(|v| v.id.clone())
-                .unwrap_or(String::new()),
+            selected_minecraft_version: String::new(),
             available_minecraft_versions,
+            available_intermediary_versions,
             show_snapshots: false,
             selected_loader_type: LoaderType::Fabric,
             selected_loader_version: available_loader_versions
@@ -115,6 +117,8 @@ impl App {
             show_betas: false,
             create_profile: false,
             install_location: super::dot_minecraft_location(),
+            output_location: super::current_location(),
+            copy_generated_location: false,
             installation_task: None,
         };
         Ok(app)
@@ -148,29 +152,32 @@ impl eframe::App for App {
                 ui.add_space(15.0);
                 ui.label("Minecraft Version");
                 ui.horizontal(|ui| {
-                    ComboBox::from_id_salt("minecraft_version")
-                        .selected_text(format!("{}", &self.selected_minecraft_version))
-                        .show_ui(ui, |ui| {
-                            for ele in &self.available_minecraft_versions {
-                                if self.show_snapshots || ele._type == "release" {
-                                    ui.selectable_value(
-                                        &mut self.selected_minecraft_version,
-                                        ele.id.clone(),
-                                        ele.id.clone(),
-                                    );
-                                }
-                            }
-                        });
-                    if (ui.checkbox(&mut self.show_snapshots, "Show Snapshots")).clicked() {
-                        self.selected_minecraft_version = self
-                            .available_minecraft_versions
-                            .iter()
-                            .filter(|v| self.show_snapshots || v._type == "release")
-                            .next()
-                            .unwrap()
-                            .id
-                            .clone();
-                    }
+                    ui.add(
+                        DropDownBox::from_iter(
+                            &self
+                                .available_minecraft_versions
+                                .iter()
+                                .filter(|v| {
+                                    self.available_intermediary_versions.contains(&v.id)
+                                        || self.available_intermediary_versions.contains(
+                                            &(v.id.clone()
+                                                + "-"
+                                                + match self.mode {
+                                                    Mode::Server => "server",
+                                                    _ => "client",
+                                                }),
+                                        )
+                                })
+                                .filter(|v| self.show_snapshots || v._type == "release")
+                                .map(|v| v.id.clone())
+                                .collect::<Vec<String>>(),
+                            "minecraft_version",
+                            &mut self.selected_minecraft_version,
+                            |ui, text| ui.selectable_label(false, text),
+                        )
+                        .hint_text("Search available versions..."),
+                    );
+                    ui.checkbox(&mut self.show_snapshots, "Show Snapshots")
                 });
                 ui.add_space(15.0);
                 ui.label("Loader");
@@ -239,15 +246,30 @@ impl eframe::App for App {
                     Mode::MMC => "Output Location",
                     _ => "Install Location",
                 });
-                ui.horizontal(|ui| {
-                    ui.text_edit_singleline(&mut self.install_location);
-                    if ui.button("Pick Location").clicked() {
-                        let picked = FileDialog::new()
-                            .set_directory(Path::new(&self.install_location))
-                            .pick_folder();
-                        if let Some(path) = picked {
-                            if let Some(path) = path.to_str() {
-                                self.install_location = path.to_owned();
+                ui.horizontal(|ui| match self.mode {
+                    Mode::MMC => {
+                        ui.text_edit_singleline(&mut self.output_location);
+                        if ui.button("Pick Location").clicked() {
+                            let picked = FileDialog::new()
+                                .set_directory(Path::new(&self.output_location))
+                                .pick_folder();
+                            if let Some(path) = picked {
+                                if let Some(path) = path.to_str() {
+                                    self.output_location = path.to_owned();
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        ui.text_edit_singleline(&mut self.install_location);
+                        if ui.button("Pick Location").clicked() {
+                            let picked = FileDialog::new()
+                                .set_directory(Path::new(&self.install_location))
+                                .pick_folder();
+                            if let Some(path) = picked {
+                                if let Some(path) = path.to_str() {
+                                    self.install_location = path.to_owned();
+                                }
                             }
                         }
                     }
@@ -257,12 +279,21 @@ impl eframe::App for App {
                 if self.mode == Mode::Client {
                     ui.add_space(15.0);
                     ui.checkbox(&mut self.create_profile, "Generate Profile");
+                } else if self.mode == Mode::MMC {
+                    ui.add_space(15.0);
+                    ui.checkbox(
+                        &mut self.copy_generated_location,
+                        "Copy Profile Path to Clipboard",
+                    );
                 }
             });
             ui.add_space(15.0);
             ui.vertical_centered(|ui| {
-                let install_button =
+                let mut install_button =
                     Button::new(RichText::new("Install").heading()).min_size(Vec2::new(100.0, 0.0));
+                if self.installation_task.is_some() {
+                    install_button = install_button.sense(Sense::empty());
+                }
                 if ui.add(install_button).clicked() {
                     let selected_version = self
                         .available_minecraft_versions
@@ -296,7 +327,22 @@ impl eframe::App for App {
                             self.installation_task = Some(handle);
                         }
                         Mode::Server => todo!(),
-                        Mode::MMC => todo!(),
+                        Mode::MMC => {
+                            let loader_type = self.selected_loader_type.clone();
+                            let location = Path::new(&self.output_location).to_path_buf();
+                            let copy_profile_path = self.copy_generated_location;
+                            let handle = tokio::spawn(async move {
+                                crate::actions::mmc_pack::install(
+                                    selected_version,
+                                    loader_type,
+                                    loader_version,
+                                    location,
+                                    copy_profile_path,
+                                )
+                                .await
+                            });
+                            self.installation_task = Some(handle);
+                        }
                     }
                 }
             });
@@ -307,13 +353,16 @@ impl eframe::App for App {
                 let handle = self.installation_task.take().unwrap();
                 tokio::spawn(async move {
                     match handle.await.unwrap() {
-                        Err(e) => display_dialog(
-                            "Installation Failed",
-                            &("Failed to install: ".to_owned() + &e.0),
-                        ),
+                        Err(e) => {
+                            error!("{}", e.0);
+                            display_dialog(
+                                "Installation Failed",
+                                &("Failed to install: ".to_owned() + &e.0),
+                            )
+                        }
                         Ok(_) => display_dialog(
                             "Installation Successful",
-                            "Ornithe has been successfully installed.<br>Most mods require that you also download the <a href=\"https://modrinth.com/mod/osl\">Ornithe Standard Libraries</a> mod and place it in your mods folder</br>",
+                            "Ornithe has been successfully installed.\nMost mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder\n",
                         ),
                     }
                 });

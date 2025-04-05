@@ -9,6 +9,7 @@ use super::{GameSide, manifest::MinecraftVersion};
 
 const META_URL: &str = "https://meta.ornithemc.net";
 
+#[allow(dead_code)]
 #[derive(Deserialize, Clone)]
 pub struct LoaderVersion {
     pub version: String,
@@ -38,6 +39,20 @@ impl LoaderType {
         match self {
             LoaderType::Fabric => "Fabric",
             LoaderType::Quilt => "Quilt",
+        }
+    }
+
+    pub fn get_maven_uid(&self) -> &str {
+        match self {
+            LoaderType::Fabric => "net.fabricmc.fabric-loader",
+            LoaderType::Quilt => "org.quiltmc.quilt-loader",
+        }
+    }
+
+    pub fn get_maven_name_start(&self) -> &str {
+        match self {
+            LoaderType::Fabric => "net.fabricmc:fabric-loader",
+            LoaderType::Quilt => "org.quiltmc:quilt-loader",
         }
     }
 }
@@ -136,13 +151,14 @@ async fn fetch_loader_versions_type(
         .map_err(|e| e.into())
 }
 
-#[derive(Deserialize)]
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
 pub struct IntermediaryVersion {
     pub version: String,
     stable: bool,
-    maven: String,
+    pub maven: String,
     #[serde(rename(deserialize = "versionNoSide"))]
-    version_no_side: String,
+    pub version_no_side: String,
 }
 
 pub async fn fetch_intermediary_versions()
@@ -158,5 +174,55 @@ pub async fn fetch_intermediary_versions()
     for ver in versions {
         out.insert(ver.version.clone(), ver);
     }
+    Ok(out)
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct ProfileJson {
+    id: String,
+    libraries: Vec<ProfileJsonLibrary>,
+}
+
+#[derive(Deserialize)]
+pub struct ProfileJsonLibrary {
+    pub name: String,
+    pub url: String,
+}
+
+pub async fn fetch_profile_libraries(
+    version: &MinecraftVersion,
+    loader_type: &LoaderType,
+    loader_version: &LoaderVersion,
+) -> Result<Vec<ProfileJsonLibrary>, InstallerError> {
+    let profile = super::CLIENT
+        .get(
+            META_URL.to_owned()
+                + &format!(
+                    "/v3/versions/{}-loader/{}/{}/profile/json",
+                    loader_type.get_name(),
+                    version.id,
+                    loader_version.version
+                ),
+        )
+        .send()
+        .await?
+        .json::<ProfileJson>()
+        .await?;
+
+    let mut out = Vec::new();
+    let mut loader_found = false;
+
+    for lib in profile.libraries {
+        if loader_found {
+            out.push(lib);
+            continue;
+        }
+
+        if lib.name.starts_with(loader_type.get_maven_name_start()) {
+            loader_found = true;
+        }
+    }
+
     Ok(out)
 }

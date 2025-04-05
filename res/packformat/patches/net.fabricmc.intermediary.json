@@ -1,0 +1,19 @@
+{
+    "formatVersion": 1,
+    "libraries": [
+        {
+            "name": "${intermediary_maven}:${intermediary_ver}",
+            "url": "https://maven.ornithemc.net/releases"
+        }
+    ],
+    "name": "Intermediary Mappings",
+    "requires": [
+        {
+            "equals": "${mc_version}",
+            "uid": "net.minecraft"
+        }
+    ],
+    "type": "release",
+    "uid": "net.fabricmc.intermediary",
+    "version": "${intermediary_ver}"
+}

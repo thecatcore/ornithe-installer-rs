@@ -38,3 +38,23 @@ pub fn dot_minecraft_location() -> String {
         default,
     )
 }
+
+fn current_dir(default: &str) -> String {
+    let fallback = home_dir().unwrap_or(PathBuf::from(default));
+    std::env::current_dir()
+        .ok()
+        .unwrap_or(fallback)
+        .to_str()
+        .unwrap_or(default)
+        .to_owned()
+}
+
+#[cfg(any(unix, target_os = "macos"))]
+pub fn current_location() -> String {
+    current_dir("/")
+}
+
+#[cfg(target_os = "windows")]
+pub fn current_location() -> String {
+    current_dir("/")
+}
