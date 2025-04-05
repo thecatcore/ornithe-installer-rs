@@ -170,6 +170,7 @@ impl eframe::App for App {
                             &mut self.selected_minecraft_version,
                             |ui, text| ui.selectable_label(false, text),
                         )
+                        .max_height(130.0)
                         .hint_text("Search available versions..."),
                     );
                     ui.checkbox(&mut self.show_snapshots, "Show Snapshots")
