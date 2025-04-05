@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1.0.97"
 base64 = "0.22.1"
 chrono = { version = "0.4.40", features = ["serde"] }
-clap = { version = "4.5.35", features = ["derive"] }
+clap = { version = "4.5.35", features = ["cargo", "derive", "string"] }
 cli-clipboard = "0.4.0"
 eframe = { version = "0.31.1", features = ["wgpu"] }
 egui = "0.31.1"

@@ -3,6 +3,13 @@ use std::path::PathBuf;
 pub mod cli;
 pub mod gui;
 
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub enum Mode {
+    Client,
+    Server,
+    MMC,
+}
+
 fn home_dir() -> Option<PathBuf> {
     #[allow(deprecated)]
     std::env::home_dir()

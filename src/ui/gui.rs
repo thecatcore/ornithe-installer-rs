@@ -15,6 +15,8 @@ use crate::{
     },
 };
 
+use super::Mode;
+
 pub async fn run() -> anyhow::Result<()> {
     let app = App::create().await;
     match app {
@@ -35,7 +37,7 @@ pub async fn run() -> anyhow::Result<()> {
 
 async fn create_window(app: App) -> Result<(), InstallerError> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([800.0, 490.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([630.0, 490.0]),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
@@ -123,13 +125,6 @@ impl App {
         };
         Ok(app)
     }
-}
-
-#[derive(PartialEq)]
-enum Mode {
-    Client,
-    Server,
-    MMC,
 }
 
 impl eframe::App for App {
