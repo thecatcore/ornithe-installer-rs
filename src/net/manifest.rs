@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -27,9 +27,9 @@ pub async fn fetch_launch_json(version: &MinecraftVersion) -> Result<String, Ins
     if let Some(val) = res.json::<Value>().await?.as_object_mut() {
         let version_details = fetch_version_details(&version).await?;
 
-        for manifest_url in version_details.manifests {
+        for manifest in version_details.manifests {
             if let Some(manifest) = super::CLIENT
-                .get(manifest_url)
+                .get(manifest.url)
                 .send()
                 .await?
                 .json::<Value>()
@@ -126,7 +126,16 @@ impl MinecraftVersion {
 
 #[derive(Deserialize)]
 pub struct VersionDetails {
-    manifests: Vec<String>,
+    manifests: Vec<VersionDetailsManifest>,
+    #[serde(rename(deserialize = "sharedMappings"))]
     shared_mappings: bool,
+    #[serde(rename(deserialize = "normalizedVersion"))]
     normalized_version: String,
+}
+
+#[derive(Deserialize)]
+pub struct VersionDetailsManifest {
+    #[serde(rename = "type")]
+    _type: String,
+    url: String,
 }

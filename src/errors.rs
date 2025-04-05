@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use log::error;
+use tokio::task::JoinError;
 
 #[derive(Debug)]
 pub struct InstallerError(pub String);

@@ -25,6 +25,7 @@ pub async fn install(
         location.to_str().unwrap_or("<not representable>")
     );
 
+    info!("Fetching launch jsons..");
     let vanilla_launch_json = manifest::fetch_launch_json(&version).await?;
 
     let ornithe_launch_json = meta::fetch_launch_json(
@@ -34,6 +35,8 @@ pub async fn install(
         &loader_version,
     )
     .await?;
+
+    info!("Setting up destination..");
 
     let vanilla_profile_name = version.id.to_string() + "-vanilla";
     let profile_name = format!(
@@ -49,14 +52,20 @@ pub async fn install(
     let profile_dir = versions_dir.join(&profile_name);
     let profile_json = profile_dir.join(profile_name.clone() + ".json");
 
-    std::fs::remove_dir_all(&vanilla_profile_dir)?;
-    std::fs::remove_dir_all(&profile_dir)?;
+    if std::fs::exists(&vanilla_profile_dir).unwrap_or_default() {
+        std::fs::remove_dir_all(&vanilla_profile_dir)?;
+    }
+    if std::fs::exists(&profile_dir).unwrap_or_default() {
+        std::fs::remove_dir_all(&profile_dir)?;
+    }
 
-    create_empty_jar(&vanilla_profile_dir, &vanilla_profile_name);
-    create_empty_jar(&profile_dir, &profile_name);
+    info!("Creating files..");
 
-    let _ = std::fs::write(vanilla_profile_json, vanilla_launch_json);
-    let _ = std::fs::write(profile_json, ornithe_launch_json);
+    create_empty_jar(&vanilla_profile_dir, &vanilla_profile_name)?;
+    create_empty_jar(&profile_dir, &profile_name)?;
+
+    std::fs::write(vanilla_profile_json, vanilla_launch_json)?;
+    std::fs::write(profile_json, ornithe_launch_json)?;
 
     if create_profile {
         update_profiles(location, profile_name, version, loader_type)?;
@@ -65,8 +74,10 @@ pub async fn install(
     Ok(())
 }
 
-fn create_empty_jar(dir: &PathBuf, name: &String) {
-    let _ = std::fs::File::create(dir.join(name.clone() + ".jar"));
+fn create_empty_jar(dir: &PathBuf, name: &String) -> Result<(), InstallerError> {
+    std::fs::create_dir_all(dir)?;
+    std::fs::File::create(dir.join(name.clone() + ".jar"))?;
+    Ok(())
 }
 
 fn update_profiles(
@@ -89,7 +100,7 @@ fn update_profiles(
                 let profiles = raw_profiles.as_object_mut().unwrap();
 
                 let new_profile_name =
-                    loader_type.get_localized_name().to_string() + " " + &version.id;
+                    "Ornithe (".to_owned() + loader_type.get_localized_name() + ") " + &version.id;
 
                 if profiles.contains_key(&new_profile_name) {
                     let raw_profile = profiles.get_mut(&new_profile_name).unwrap();
@@ -115,7 +126,7 @@ fn update_profiles(
                     profiles.insert(new_profile_name, profile);
                 }
 
-                let _ = std::fs::write(&launcher_profiles_path, serde_json::to_string(&json)?);
+                std::fs::write(&launcher_profiles_path, serde_json::to_string(&json)?)?;
 
                 Ok(())
             }

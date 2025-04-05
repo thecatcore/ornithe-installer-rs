@@ -59,10 +59,12 @@ pub async fn fetch_launch_json(
 ) -> Result<String, InstallerError> {
     let mut text = super::CLIENT
         .get(
-            side.launch_json_endpoint()
-                .replacen("{}", loader_type.get_name(), 1)
-                .replacen("{}", version.get_id(&side).await?.as_str(), 1)
-                .replacen("{}", &loader_version.version, 1),
+            META_URL.to_owned()
+                + &side
+                    .launch_json_endpoint()
+                    .replacen("{}", loader_type.get_name(), 1)
+                    .replacen("{}", version.get_id(&side).await?.as_str(), 1)
+                    .replacen("{}", &loader_version.version, 1),
         )
         .send()
         .await?
