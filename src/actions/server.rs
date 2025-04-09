@@ -204,7 +204,11 @@ async fn create_launch_jar(
 
     let mut manifest = Vec::new();
     writeln!(manifest, "Manifest-Version: 1.0\r")?;
-    writeln!(manifest, "Main-Class: {}\r", launch_main_class)?;
+    writeln!(
+        manifest,
+        "{}\r",
+        wrap_manifest_line(&format!("Main-Class: {}", launch_main_class))
+    )?;
     let mut class_path = String::from("Class-Path: ");
     for library in library_files {
         let relative = library.strip_prefix(install_location)?.to_str();
@@ -214,7 +218,11 @@ async fn create_launch_jar(
     }
 
     writeln!(manifest, "{}\r", wrap_manifest_line(class_path.trim_end()))?;
-    writeln!(manifest, "Minecraft-Version: {}\r", version.id)?;
+    writeln!(
+        manifest,
+        "{}\r",
+        wrap_manifest_line(&format!("Minecraft-Version: {}\r", version.id))
+    )?;
     zip.write_all(&manifest)?;
     zip.add_directory("META-INF", SimpleFileOptions::default())?;
 
