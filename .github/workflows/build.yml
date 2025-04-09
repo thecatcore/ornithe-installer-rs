@@ -2,27 +2,45 @@ name: Automated Build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
+  RUST_BACKTRACE: 1
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build: [linux, windows, mac]
+        include:
+          - build: linux
+            os: buildjet-8vcpu-ubuntu-2204
+            rust: "stable"
+          - build: windows
+            os: windows-latest
+            rust: "stable"
+          - build: mac
+            os: macos-latest
+            rust: "stable"
+    continue-on-error: ${{ matrix.rust != 'stable' }}
+    runs-on: ${{ matrix.os }}
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build --verbose
-    - name: Build release binary
-      run: cargo build --release
-    - name: Upload a Build Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: CI builds
-        path: target/**/ornithe-installer-rs
-
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --verbose
+      - name: Build release binary
+        run: cargo build --release
+      - name: Upload a Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CI builds
+          path: target/**/ornithe-installer-rs
