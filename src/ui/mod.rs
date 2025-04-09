@@ -27,7 +27,7 @@ fn location(minecraft_path: Option<PathBuf>, default: &str) -> String {
     path.to_str().unwrap_or(default).to_owned()
 }
 
-#[cfg(any(unix))]
+#[cfg(all(any(unix), not(target_os = "macos")))]
 pub fn dot_minecraft_location() -> String {
     location(home_dir().map(|p| p.join(".minecraft")), "/")
 }
@@ -42,7 +42,7 @@ pub fn dot_minecraft_location() -> String {
 pub fn dot_minecraft_location() -> String {
     location(
         home_dir().map(|p| p.join("Libary/Application Support/minecraft")),
-        default,
+        "/",
     )
 }
 
@@ -56,7 +56,7 @@ fn current_dir(default: &str) -> String {
         .to_owned()
 }
 
-#[cfg(any(unix, target_os = "macos"))]
+#[cfg(any(unix))]
 pub fn current_location() -> String {
     current_dir("/")
 }
