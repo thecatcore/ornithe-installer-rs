@@ -1,0 +1,28 @@
+name: Automated Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --verbose
+    - name: Build release binary
+      run: cargo build --release
+    - name: Upload a Build Artifact
+      uses: actions/upload-artifact@v4
+      with: |
+        target/debug/ornithe-installer-rs
+		    target/release/ornithe-installer-rs	  
+
