@@ -1,4 +1,5 @@
 use env_logger::Env;
+use log::info;
 
 mod actions;
 mod errors;
@@ -11,12 +12,15 @@ static ORNITHE_ICON_BYTES: &[u8] = include_bytes!("../res/icon.png");
 const OSL_MODRINTH_URL: &str = "https://modrinth.com/mod/osl";
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
     env_logger::init_from_env(Env::default().default_filter_or("ornithe_installer_rs=info"));
+
+    info!("Ornithe Installer v{}", VERSION);
+
     if std::env::args().count() > 0 {
-        crate::ui::cli::run();
+        crate::ui::cli::run().await;
+        return;
     }
 
-    crate::ui::gui::run().await?;
-    Ok(())
+    crate::ui::gui::run().await
 }

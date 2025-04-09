@@ -131,10 +131,10 @@ impl MinecraftVersion {
         side: &GameSide,
     ) -> Result<VersionDownload, reqwest::Error> {
         let downloads = fetch_version_details(self).await?.downloads;
-        match side {
+        Ok(match side {
             GameSide::Client => downloads.client,
             GameSide::Server => downloads.server,
-        }
+        })
     }
 }
 

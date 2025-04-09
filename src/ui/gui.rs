@@ -17,7 +17,8 @@ use crate::{
 
 use super::Mode;
 
-pub async fn run() -> anyhow::Result<()> {
+pub async fn run() {
+    info!("Starting GUI installer...");
     let app = App::create().await;
     match app {
         Ok(app) => match create_window(app).await {
@@ -31,8 +32,6 @@ pub async fn run() -> anyhow::Result<()> {
             error!("Failed to launch gui!");
         }
     }
-
-    Ok(())
 }
 
 async fn create_window(app: App) -> Result<(), InstallerError> {
@@ -87,6 +86,7 @@ struct App {
     mmc_output_location: String,
     server_install_location: String,
     copy_generated_location: bool,
+    download_minecraft_server: bool,
     installation_task: Option<JoinHandle<Result<(), InstallerError>>>,
 }
 
@@ -129,11 +129,12 @@ impl App {
                 .unwrap_or(String::new()),
             available_loader_versions,
             show_betas: false,
-            create_profile: false,
+            create_profile: true,
             client_install_location: super::dot_minecraft_location(),
             mmc_output_location: super::current_location(),
             server_install_location: super::server_location(),
             copy_generated_location: false,
+            download_minecraft_server: true,
             installation_task: None,
         };
         Ok(app)
@@ -298,15 +299,23 @@ impl eframe::App for App {
                 });
             });
             ui.vertical_centered(|ui| {
-                if self.mode == Mode::Client {
-                    ui.add_space(15.0);
-                    ui.checkbox(&mut self.create_profile, "Generate Profile");
-                } else if self.mode == Mode::MMC {
-                    ui.add_space(15.0);
-                    ui.checkbox(
-                        &mut self.copy_generated_location,
-                        "Copy Profile Path to Clipboard",
-                    );
+                ui.add_space(15.0);
+                match self.mode {
+                    Mode::Client => {
+                        ui.checkbox(&mut self.create_profile, "Generate Profile");
+                    }
+                    Mode::Server => {
+                        ui.checkbox(
+                            &mut self.download_minecraft_server,
+                            "Download Minecraft Server",
+                        );
+                    }
+                    Mode::MMC => {
+                        ui.checkbox(
+                            &mut self.copy_generated_location,
+                            "Copy Profile Path to Clipboard",
+                        );
+                    }
                 }
             });
             ui.add_space(15.0);
@@ -351,12 +360,14 @@ impl eframe::App for App {
                         Mode::Server => {
                             let loader_type = self.selected_loader_type.clone();
                             let location = Path::new(&self.client_install_location).to_path_buf();
+                            let download_server = self.download_minecraft_server;
                             self.installation_task = Some(tokio::spawn(async move {
                                 crate::actions::server::install(
                                     selected_version,
                                     loader_type,
                                     loader_version,
                                     location.canonicalize()?,
+                                    download_server,
                                 )
                                 .await
                             }));

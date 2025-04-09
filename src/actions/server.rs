@@ -58,7 +58,7 @@ async fn install_path(
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
     for path in clear_paths {
         if std::fs::exists(&path).unwrap_or_default() {
-            std::fs::remove_dir_all(&path);
+            std::fs::remove_dir_all(&path)?;
         }
     }
 
@@ -192,8 +192,8 @@ async fn create_launch_jar(
     zip.start_file("META-INF/MANIFEST.MF", SimpleFileOptions::default())?;
 
     let mut manifest = Vec::new();
-    writeln!(manifest, "Manifest-Version: 1.0");
-    writeln!(manifest, "Main-Class: {}", launch_main_class);
+    writeln!(manifest, "Manifest-Version: 1.0")?;
+    writeln!(manifest, "Main-Class: {}", launch_main_class)?;
     let mut class_path = String::new();
     for library in library_files {
         let relative = library.strip_prefix(install_location)?.to_str();
@@ -201,7 +201,7 @@ async fn create_launch_jar(
             class_path += &(p.replace("\\", "/") + " ");
         }
     }
-    writeln!(manifest, "Class-Path: {}", class_path.trim_end());
+    writeln!(manifest, "Class-Path: {}", class_path.trim_end())?;
     zip.write_all(&manifest)?;
 
     if loader_type == &LoaderType::Fabric {
@@ -265,7 +265,7 @@ pub async fn install_and_run<I, S>(
     loader_type: LoaderType,
     loader_version: LoaderVersion,
     location: PathBuf,
-    java: Option<PathBuf>,
+    java: Option<&PathBuf>,
     args: I,
 ) -> Result<(), InstallerError>
 where
