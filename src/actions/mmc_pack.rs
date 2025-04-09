@@ -23,6 +23,11 @@ pub async fn install(
     output_dir: PathBuf,
     copy_profile_path: bool,
 ) -> Result<(), InstallerError> {
+    if !output_dir.exists() {
+        std::fs::create_dir_all(&output_dir)?;
+    }
+    let output_dir = output_dir.canonicalize()?;
+
     let version_id = version.get_id(&crate::net::GameSide::Client).await?;
     let intermediary_versions = meta::fetch_intermediary_versions().await?;
     let intermediary_version = intermediary_versions

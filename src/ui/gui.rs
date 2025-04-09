@@ -326,68 +326,76 @@ impl eframe::App for App {
                     install_button = install_button.sense(Sense::empty());
                 }
                 if ui.add(install_button).clicked() {
-                    let selected_version = self
+                    if let Some(version) = self
                         .available_minecraft_versions
                         .iter()
                         .find(|v| v.id == self.selected_minecraft_version)
-                        .unwrap()
-                        .clone();
-                    let loader_version = self
-                        .available_loader_versions
-                        .get(&self.selected_loader_type)
-                        .unwrap()
-                        .iter()
-                        .find(|v| v.version == self.selected_loader_version)
-                        .unwrap()
-                        .clone();
-                    match self.mode {
-                        Mode::Client => {
-                            let loader_type = self.selected_loader_type.clone();
-                            let location = Path::new(&self.client_install_location).to_path_buf();
-                            let create_profile = self.create_profile;
-                            let handle = tokio::spawn(async move {
-                                crate::actions::client::install(
-                                    selected_version,
-                                    loader_type,
-                                    loader_version,
-                                    location.canonicalize()?,
-                                    create_profile,
-                                )
-                                .await
-                            });
-                            self.installation_task = Some(handle);
+                    {
+                        let selected_version = version.clone();
+                        let loader_version = self
+                            .available_loader_versions
+                            .get(&self.selected_loader_type)
+                            .unwrap()
+                            .iter()
+                            .find(|v| v.version == self.selected_loader_version)
+                            .unwrap()
+                            .clone();
+                        match self.mode {
+                            Mode::Client => {
+                                let loader_type = self.selected_loader_type.clone();
+                                let location =
+                                    Path::new(&self.client_install_location).to_path_buf();
+                                let create_profile = self.create_profile;
+                                let handle = tokio::spawn(async move {
+                                    crate::actions::client::install(
+                                        selected_version,
+                                        loader_type,
+                                        loader_version,
+                                        location,
+                                        create_profile,
+                                    )
+                                    .await
+                                });
+                                self.installation_task = Some(handle);
+                            }
+                            Mode::Server => {
+                                let loader_type = self.selected_loader_type.clone();
+                                let location =
+                                    Path::new(&self.server_install_location).to_path_buf();
+                                let download_server = self.download_minecraft_server;
+                                self.installation_task = Some(tokio::spawn(async move {
+                                    crate::actions::server::install(
+                                        selected_version,
+                                        loader_type,
+                                        loader_version,
+                                        location,
+                                        download_server,
+                                    )
+                                    .await
+                                }));
+                            }
+                            Mode::MMC => {
+                                let loader_type = self.selected_loader_type.clone();
+                                let location = Path::new(&self.mmc_output_location).to_path_buf();
+                                let copy_profile_path = self.copy_generated_location;
+                                let handle = tokio::spawn(async move {
+                                    crate::actions::mmc_pack::install(
+                                        selected_version,
+                                        loader_type,
+                                        loader_version,
+                                        location,
+                                        copy_profile_path,
+                                    )
+                                    .await
+                                });
+                                self.installation_task = Some(handle);
+                            }
                         }
-                        Mode::Server => {
-                            let loader_type = self.selected_loader_type.clone();
-                            let location = Path::new(&self.client_install_location).to_path_buf();
-                            let download_server = self.download_minecraft_server;
-                            self.installation_task = Some(tokio::spawn(async move {
-                                crate::actions::server::install(
-                                    selected_version,
-                                    loader_type,
-                                    loader_version,
-                                    location.canonicalize()?,
-                                    download_server,
-                                )
-                                .await
-                            }));
-                        }
-                        Mode::MMC => {
-                            let loader_type = self.selected_loader_type.clone();
-                            let location = Path::new(&self.mmc_output_location).to_path_buf();
-                            let copy_profile_path = self.copy_generated_location;
-                            let handle = tokio::spawn(async move {
-                                crate::actions::mmc_pack::install(
-                                    selected_version,
-                                    loader_type,
-                                    loader_version,
-                                    location.canonicalize()?,
-                                    copy_profile_path,
-                                )
-                                .await
-                            });
-                            self.installation_task = Some(handle);
-                        }
+                    } else {
+                        display_dialog(
+                            "Installation Failed",
+                            "No supported Minecraft version is selected",
+                        );
                     }
                 }
             });

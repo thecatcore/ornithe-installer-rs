@@ -54,8 +54,7 @@ pub async fn run() {
                 )
                 .arg(arg!(--"download-minecraft" "Whether to download the minecraft server jar"))
                 .subcommand(Command::new("run").about("Install and run the server")
-                .arg(arg!(--args <ARGS> "Whether to also run the installed server, with the provided arguments")
-            .default_value(""))
+                .arg(arg!(--args <ARGS> "Java arguments to pass to the server (before the server jar)"))
                 .arg(arg!(--java <PATH> "The java binary to use to run the server").value_parser(value_parser!(PathBuf)))),
         ))
         .subcommand(
@@ -174,14 +173,14 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         if let Some(matches) = matches.subcommand_matches("run") {
             let java = matches.get_one::<PathBuf>("java");
-            let run_args = matches.get_one::<String>("args").unwrap();
+            let run_args = matches.get_one::<String>("args");
             return crate::actions::server::install_and_run(
                 minecraft_version,
                 loader_type,
                 loader_version,
                 location,
                 java,
-                run_args.split(" "),
+                run_args.map(|s| s.split(" ")),
             )
             .await;
         }
@@ -270,7 +269,7 @@ fn get_loader_version(
 
 fn add_arguments(command: Command) -> Command {
     command
-        .arg(arg!(-m --"minecraft-version" <VERSION> "Minecraft version to use"))
+        .arg(arg!(-m --"minecraft-version" <VERSION> "Minecraft version to use").required(true))
         .arg(
             arg!(--"loader-type" <TYPE> "Loader type to use")
                 .default_value("fabric")

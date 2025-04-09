@@ -1,4 +1,9 @@
-use std::{ffi::OsStr, io::Write, path::PathBuf, process::Command};
+use std::{
+    ffi::OsStr,
+    io::Write,
+    path::PathBuf,
+    process::{Command, Stdio},
+};
 
 use log::info;
 use serde_json::Value;
@@ -20,7 +25,7 @@ pub async fn install(
     location: PathBuf,
     install_server: bool,
 ) -> Result<(), InstallerError> {
-    let _ = install_path(
+    install_path(
         &version,
         &loader_type,
         &loader_version,
@@ -47,6 +52,11 @@ async fn install_path(
     location: &PathBuf,
     install_server: bool,
 ) -> Result<(), InstallerError> {
+    if !location.exists() {
+        std::fs::create_dir_all(&location)?;
+    }
+    let location = location.canonicalize()?;
+
     info!(
         "Installing server for {} using {} Loader {} to {}",
         version.id,
@@ -57,7 +67,7 @@ async fn install_path(
 
     let clear_paths = [location.join(".fabric"), location.join(".quilt")];
     for path in clear_paths {
-        if std::fs::exists(&path).unwrap_or_default() {
+        if path.exists() {
             std::fs::remove_dir_all(&path)?;
         }
     }
@@ -146,15 +156,16 @@ async fn install_path(
 
     if let Some(loader) = fabric_loader_artifact {
         let lib = location.join("libraries").join(split_artifact(&loader));
-        launch_main_class = read_jar_main_class(&lib)?;
+        launch_main_class = read_jar_manifest_attribute(&lib, "Main-Class")?;
     }
 
-    if !std::fs::exists(location).unwrap_or_default() {
-        std::fs::create_dir_all(location)?;
+    if !location.exists() {
+        std::fs::create_dir_all(&location)?;
     }
 
     create_launch_jar(
-        location,
+        version,
+        &location,
         loader_type,
         main_class,
         &launch_main_class,
@@ -174,6 +185,7 @@ async fn install_path(
 }
 
 async fn create_launch_jar(
+    version: &MinecraftVersion,
     install_location: &PathBuf,
     loader_type: &LoaderType,
     main_class: &str,
@@ -181,28 +193,30 @@ async fn create_launch_jar(
     library_files: &Vec<PathBuf>,
 ) -> Result<(), InstallerError> {
     let jar_out = install_location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
-    if std::fs::exists(&jar_out).unwrap_or_default() {
+    if jar_out.exists() {
         std::fs::remove_file(&jar_out)?;
     }
 
     let file = std::fs::File::create(jar_out)?;
     let mut zip = ZipWriter::new(file);
 
-    zip.add_directory("META-INF", SimpleFileOptions::default())?;
     zip.start_file("META-INF/MANIFEST.MF", SimpleFileOptions::default())?;
 
     let mut manifest = Vec::new();
-    writeln!(manifest, "Manifest-Version: 1.0")?;
-    writeln!(manifest, "Main-Class: {}", launch_main_class)?;
-    let mut class_path = String::new();
+    writeln!(manifest, "Manifest-Version: 1.0\r")?;
+    writeln!(manifest, "Main-Class: {}\r", launch_main_class)?;
+    let mut class_path = String::from("Class-Path: ");
     for library in library_files {
         let relative = library.strip_prefix(install_location)?.to_str();
         if let Some(p) = relative {
             class_path += &(p.replace("\\", "/") + " ");
         }
     }
-    writeln!(manifest, "Class-Path: {}", class_path.trim_end())?;
+
+    writeln!(manifest, "{}\r", wrap_manifest_line(class_path.trim_end()))?;
+    writeln!(manifest, "Minecraft-Version: {}\r", version.id)?;
     zip.write_all(&manifest)?;
+    zip.add_directory("META-INF", SimpleFileOptions::default())?;
 
     if loader_type == &LoaderType::Fabric {
         zip.start_file(
@@ -217,24 +231,41 @@ async fn create_launch_jar(
     Ok(())
 }
 
-fn read_jar_main_class(jar_file: &PathBuf) -> Result<String, InstallerError> {
+fn wrap_manifest_line(line: &str) -> String {
+    let mut res = String::new();
+    let mut count = 0;
+    for char in line.chars() {
+        res += &char.to_string();
+        count += 1;
+        // Manifest lines are at at most 72 chars long
+        if count == 72 {
+            res += "\r\n ";
+            count = 1;
+        }
+    }
+    res
+}
+
+fn read_jar_manifest_attribute(
+    jar_file: &PathBuf,
+    attribute: &str,
+) -> Result<String, InstallerError> {
+    let attribute = &(attribute.to_owned() + ": ");
     let file = std::fs::File::open(jar_file)?;
     let mut zip = ZipArchive::new(file)?;
 
     let mut manifest = zip.by_name("META-INF/MANIFEST.MF")?;
     let mf_str = std::io::read_to_string(&mut manifest)?;
-    let main_class_line = mf_str
-        .split("\n")
-        .find(|line| line.starts_with("Main-Class: "));
+    let main_class_line = mf_str.split("\n").find(|line| line.starts_with(attribute));
     if let Some(line) = main_class_line {
-        let class = line.strip_prefix("Main-Class: ");
+        let class = line.strip_prefix(attribute);
         if let Some(name) = class {
             return Ok(name.to_owned());
         }
     }
 
     Err(InstallerError(
-        "Couldn't find 'Main-Class' attribute in fabric loader's jar manifest!".to_owned(),
+        "Couldn't find '".to_owned() + attribute + "' attribute in jar manifest!",
     ))
 }
 
@@ -266,14 +297,25 @@ pub async fn install_and_run<I, S>(
     loader_version: LoaderVersion,
     location: PathBuf,
     java: Option<&PathBuf>,
-    args: I,
+    args: Option<I>,
 ) -> Result<(), InstallerError>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
     let launch_jar = location.join(loader_type.get_name().to_owned() + "-server-launch.jar");
-    if !std::fs::exists(&launch_jar).unwrap_or_default() {
+    let mut needs_install = false;
+    if !launch_jar.exists() {
+        needs_install = true;
+    }
+
+    if !needs_install {
+        needs_install = read_jar_manifest_attribute(&launch_jar, "Minecraft-Version")
+            .map(|v| v != version.id)
+            .unwrap_or(true);
+    }
+
+    if needs_install {
         install_path(&version, &loader_type, &loader_version, &location, true).await?;
     }
 
@@ -283,11 +325,18 @@ where
             java_binary = path.to_owned();
         }
     }
-    Command::new(java_binary)
-        .args(args)
-        .arg("-jar")
-        .arg(launch_jar.canonicalize()?)
-        .arg("nogui")
-        .spawn()?;
+    let jar = launch_jar.canonicalize()?;
+
+    let mut cmd = Command::new(java_binary);
+    cmd.current_dir(location)
+        .stdout(Stdio::inherit())
+        .stdin(Stdio::inherit())
+        .stderr(Stdio::inherit());
+    if let Some(args) = args {
+        cmd.args(args);
+    }
+    cmd.arg("-jar").arg(jar).arg("nogui");
+    cmd.status()?;
+
     Ok(())
 }

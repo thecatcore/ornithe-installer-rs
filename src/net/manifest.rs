@@ -159,7 +159,7 @@ struct VersionDownloads {
 #[derive(Deserialize)]
 pub struct VersionDownload {
     pub sha1: String,
-    pub size: String,
+    pub size: u32,
     pub url: String,
 }
 

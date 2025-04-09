@@ -20,6 +20,10 @@ pub async fn install(
     location: PathBuf,
     create_profile: bool,
 ) -> Result<(), InstallerError> {
+    if !location.exists() {
+        std::fs::create_dir_all(&location)?;
+    }
+    let location = location.canonicalize()?;
     info!(
         "Installing Minecraft client at {}",
         location.to_str().unwrap_or("<not representable>")
