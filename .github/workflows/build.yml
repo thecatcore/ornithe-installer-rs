@@ -22,7 +22,7 @@ jobs:
       run: cargo build --release
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v4
-      with: |
-        target/debug/ornithe-installer-rs
-        target/release/ornithe-installer-rs
+      with:
+        name: CI builds
+        path: target/**/ornithe-installer-rs
 
