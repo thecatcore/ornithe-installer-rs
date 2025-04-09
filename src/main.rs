@@ -17,7 +17,8 @@ async fn main() {
 
     info!("Ornithe Installer v{}", VERSION);
 
-    if std::env::args().count() > 0 {
+    // The first argument is the binary name
+    if std::env::args().count() > 1 {
         crate::ui::cli::run().await;
         return;
     }
