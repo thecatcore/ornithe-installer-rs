@@ -68,8 +68,7 @@ pub async fn install(
     zip.start_file("instance.cfg", SimpleFileOptions::default())?;
     let mut instance_cfg = INSTANCE_CONFIG.replace("${mc_version}", &version.id);
 
-    #[cfg(any(unix))]
-    {
+    if cfg!(all(any(unix), not(target_os = "macos"))) {
         instance_cfg += "\nOverrideCommands=true\nWrapperCommand=env __GL_THREADED_OPTIMIZATIONS=0";
     }
 
