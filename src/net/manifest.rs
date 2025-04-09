@@ -125,6 +125,17 @@ impl MinecraftVersion {
             Ok(self.id.clone() + "-" + side.id())
         }
     }
+
+    pub async fn get_jar_download_url(
+        &self,
+        side: &GameSide,
+    ) -> Result<VersionDownload, reqwest::Error> {
+        let downloads = fetch_version_details(self).await?.downloads;
+        match side {
+            GameSide::Client => downloads.client,
+            GameSide::Server => downloads.server,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -135,6 +146,21 @@ pub struct VersionDetails {
     shared_mappings: bool,
     #[serde(rename(deserialize = "normalizedVersion"))]
     normalized_version: String,
+    downloads: VersionDownloads,
+}
+
+#[derive(Deserialize)]
+struct VersionDownloads {
+    client: VersionDownload,
+    server: VersionDownload,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+pub struct VersionDownload {
+    pub sha1: String,
+    pub size: String,
+    pub url: String,
 }
 
 #[derive(Deserialize)]

@@ -3091,6 +3091,7 @@ dependencies = [
  "serde_json",
  "tauri-rfd",
  "tokio",
+ "webbrowser",
  "zip",
 ]
 

@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, path::StripPrefixError};
 
 #[derive(Debug)]
 pub struct InstallerError(pub String);
@@ -29,6 +29,12 @@ impl From<std::io::Error> for InstallerError {
 
 impl From<zip::result::ZipError> for InstallerError {
     fn from(value: zip::result::ZipError) -> Self {
+        InstallerError(format!("{:?}", value))
+    }
+}
+
+impl From<StripPrefixError> for InstallerError {
+    fn from(value: StripPrefixError) -> Self {
         InstallerError(format!("{:?}", value))
     }
 }

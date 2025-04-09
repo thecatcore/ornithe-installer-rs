@@ -63,5 +63,26 @@ pub fn current_location() -> String {
 
 #[cfg(target_os = "windows")]
 pub fn current_location() -> String {
-    current_dir("/")
+    current_dir(r"C:\")
+}
+
+fn server_dir(default: &str) -> String {
+    let fallback = home_dir().unwrap_or(PathBuf::from(default));
+    std::env::current_dir()
+        .ok()
+        .unwrap_or(fallback)
+        .join("server")
+        .to_str()
+        .unwrap_or(default)
+        .to_owned()
+}
+
+#[cfg(any(unix, target_os = "macos"))]
+pub fn server_location() -> String {
+    server_dir("/")
+}
+
+#[cfg(target_os = "windows")]
+pub fn server_location() -> String {
+    server_dir(r"C:\")
 }

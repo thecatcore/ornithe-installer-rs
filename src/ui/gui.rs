@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::Path};
 use egui::{Button, ComboBox, RichText, Sense, Vec2};
 use egui_dropdown::DropDownBox;
 use log::{error, info};
-use rfd::{AsyncMessageDialog, FileDialog};
+use rfd::{AsyncMessageDialog, FileDialog, MessageButtons};
 use tokio::task::JoinHandle;
 
 use crate::{
@@ -51,13 +51,24 @@ async fn create_window(app: App) -> Result<(), InstallerError> {
 }
 
 fn display_dialog(title: &str, message: &str) {
+    display_dialog_ext(title, message, MessageButtons::Ok, |_| {});
+}
+
+fn display_dialog_ext<F>(title: &str, message: &str, buttons: MessageButtons, after: F)
+where
+    F: FnOnce(bool) -> (),
+    F: Send,
+    F: 'static,
+{
     info!("Displaying dialog: {}: {}", title, message);
     let dialog = AsyncMessageDialog::new()
         .set_title(title)
         .set_level(rfd::MessageLevel::Info)
-        .set_description(&message);
+        .set_description(&message)
+        .set_buttons(buttons);
     tokio::spawn(async move {
-        dialog.show().await;
+        let out = dialog.show().await;
+        after(out);
     });
 }
 
@@ -72,8 +83,9 @@ struct App {
     available_loader_versions: HashMap<LoaderType, Vec<LoaderVersion>>,
     show_betas: bool,
     create_profile: bool,
-    install_location: String,
-    output_location: String,
+    client_install_location: String,
+    mmc_output_location: String,
+    server_install_location: String,
     copy_generated_location: bool,
     installation_task: Option<JoinHandle<Result<(), InstallerError>>>,
 }
@@ -118,8 +130,9 @@ impl App {
             available_loader_versions,
             show_betas: false,
             create_profile: false,
-            install_location: super::dot_minecraft_location(),
-            output_location: super::current_location(),
+            client_install_location: super::dot_minecraft_location(),
+            mmc_output_location: super::current_location(),
+            server_install_location: super::server_location(),
             copy_generated_location: false,
             installation_task: None,
         };
@@ -244,27 +257,40 @@ impl eframe::App for App {
                 });
                 ui.horizontal(|ui| match self.mode {
                     Mode::MMC => {
-                        ui.text_edit_singleline(&mut self.output_location);
+                        ui.text_edit_singleline(&mut self.mmc_output_location);
                         if ui.button("Pick Location").clicked() {
                             let picked = FileDialog::new()
-                                .set_directory(Path::new(&self.output_location))
+                                .set_directory(Path::new(&self.mmc_output_location))
                                 .pick_folder();
                             if let Some(path) = picked {
                                 if let Some(path) = path.to_str() {
-                                    self.output_location = path.to_owned();
+                                    self.mmc_output_location = path.to_owned();
                                 }
                             }
                         }
                     }
-                    _ => {
-                        ui.text_edit_singleline(&mut self.install_location);
+                    Mode::Client => {
+                        ui.text_edit_singleline(&mut self.client_install_location);
                         if ui.button("Pick Location").clicked() {
                             let picked = FileDialog::new()
-                                .set_directory(Path::new(&self.install_location))
+                                .set_directory(Path::new(&self.client_install_location))
                                 .pick_folder();
                             if let Some(path) = picked {
                                 if let Some(path) = path.to_str() {
-                                    self.install_location = path.to_owned();
+                                    self.client_install_location = path.to_owned();
+                                }
+                            }
+                        }
+                    }
+                    Mode::Server => {
+                        ui.text_edit_singleline(&mut self.server_install_location);
+                        if ui.button("Pick Location").clicked() {
+                            let picked = FileDialog::new()
+                                .set_directory(Path::new(&self.server_install_location))
+                                .pick_folder();
+                            if let Some(path) = picked {
+                                if let Some(path) = path.to_str() {
+                                    self.server_install_location = path.to_owned();
                                 }
                             }
                         }
@@ -308,31 +334,43 @@ impl eframe::App for App {
                     match self.mode {
                         Mode::Client => {
                             let loader_type = self.selected_loader_type.clone();
-                            let location = Path::new(&self.install_location).to_path_buf();
+                            let location = Path::new(&self.client_install_location).to_path_buf();
                             let create_profile = self.create_profile;
                             let handle = tokio::spawn(async move {
                                 crate::actions::client::install(
                                     selected_version,
                                     loader_type,
                                     loader_version,
-                                    location,
+                                    location.canonicalize()?,
                                     create_profile,
                                 )
                                 .await
                             });
                             self.installation_task = Some(handle);
                         }
-                        Mode::Server => todo!(),
+                        Mode::Server => {
+                            let loader_type = self.selected_loader_type.clone();
+                            let location = Path::new(&self.client_install_location).to_path_buf();
+                            self.installation_task = Some(tokio::spawn(async move {
+                                crate::actions::server::install(
+                                    selected_version,
+                                    loader_type,
+                                    loader_version,
+                                    location.canonicalize()?,
+                                )
+                                .await
+                            }));
+                        }
                         Mode::MMC => {
                             let loader_type = self.selected_loader_type.clone();
-                            let location = Path::new(&self.output_location).to_path_buf();
+                            let location = Path::new(&self.mmc_output_location).to_path_buf();
                             let copy_profile_path = self.copy_generated_location;
                             let handle = tokio::spawn(async move {
                                 crate::actions::mmc_pack::install(
                                     selected_version,
                                     loader_type,
                                     loader_version,
-                                    location,
+                                    location.canonicalize()?,
                                     copy_profile_path,
                                 )
                                 .await
@@ -356,9 +394,17 @@ impl eframe::App for App {
                                 &("Failed to install: ".to_owned() + &e.0),
                             )
                         }
-                        Ok(_) => display_dialog(
+                        Ok(_) => display_dialog_ext(
                             "Installation Successful",
-                            "Ornithe has been successfully installed.\nMost mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder\n",
+                            "Ornithe has been successfully installed.\nMost mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder.\nWould you like to open OSL's modrinth page now?",
+                            MessageButtons::YesNo,
+                            |res| {
+                                if res {
+                                    if webbrowser::open(crate::OSL_MODRINTH_URL).is_err() {
+                                        display_dialog("Failed to open modrinth", &("Failed to open modrinth page for Ornithe Standard Libraries.\nYou can find it at ".to_owned()+crate::OSL_MODRINTH_URL).as_str());
+                                    }
+                                }
+                            },
                         ),
                     }
                 });
