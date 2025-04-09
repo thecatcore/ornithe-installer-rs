@@ -52,8 +52,7 @@ pub async fn run() {
                         .default_value(super::server_location())
                         .value_parser(value_parser!(PathBuf)),
                 )
-                .arg(arg!(--"download-minecraft" "Whether to download the minecraft server jar")
-                    .conflicts_with("run"))
+                .arg(arg!(--"download-minecraft" "Whether to download the minecraft server jar"))
                 .subcommand(Command::new("run").about("Install and run the server")
                 .arg(arg!(--args <ARGS> "Whether to also run the installed server, with the provided arguments")
             .default_value(""))
@@ -103,7 +102,17 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
         }
         writeln!(
             std::io::stdout(),
-            "Available {} Loader versions:\n",
+            "Latest {} Loader version: {}",
+            loader_type.get_localized_name(),
+            versions
+                .get(&loader_type)
+                .and_then(|list| list.get(0))
+                .map(|v| v.version.clone())
+                .unwrap_or("<not available>".to_owned())
+        )?;
+        writeln!(
+            std::io::stdout(),
+            "Available {} Loader versions:",
             loader_type.get_localized_name()
         )?;
         writeln!(std::io::stdout(), "{}", out)?;
