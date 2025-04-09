@@ -1,6 +1,6 @@
 use std::{collections::HashMap, path::Path};
 
-use egui::{Button, ComboBox, RichText, Sense, Vec2};
+use egui::{Button, ComboBox, IconData, RichText, Sense, Theme, Vec2};
 use egui_dropdown::DropDownBox;
 use log::{error, info};
 use rfd::{AsyncMessageDialog, FileDialog, MessageButtons};
@@ -36,7 +36,13 @@ pub async fn run() {
 
 async fn create_window(app: App) -> Result<(), InstallerError> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([630.0, 490.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([630.0, 490.0])
+            .with_icon(IconData {
+                rgba: crate::ORNITHE_ICON_BYTES.to_vec(),
+                width: 512,
+                height: 512,
+            }),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
@@ -144,6 +150,7 @@ impl App {
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         ctx.set_zoom_factor(1.5);
+        ctx.options_mut(|opt| opt.fallback_theme = Theme::Light);
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.heading("Ornithe Installer");

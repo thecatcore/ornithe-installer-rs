@@ -1,5 +1,6 @@
 use std::{io::Write, path::PathBuf};
 
+use log::info;
 use serde_json::{Value, json};
 use zip::{ZipWriter, write::SimpleFileOptions};
 
@@ -28,6 +29,7 @@ pub async fn install(
     }
     let output_dir = output_dir.canonicalize()?;
 
+    info!("Fetching version information...");
     let version_id = version.get_id(&crate::net::GameSide::Client).await?;
     let intermediary_versions = meta::fetch_intermediary_versions().await?;
     let intermediary_version = intermediary_versions
@@ -47,6 +49,8 @@ pub async fn install(
 
     let lwjgl_version = manifest::find_lwjgl_version(&version).await?;
 
+    info!("Transforming templates...");
+
     let mut transformed_pack_json = serde_json::from_str::<Value>(
         &transform_pack_json(
             &version,
@@ -63,6 +67,9 @@ pub async fn install(
             .await?;
 
     let minecraft_patch_json = get_mmc_launch_json(&version, &lwjgl_version).await?;
+
+    info!("Generating instance zip...");
+
     let output_file = output_dir.join("Ornithe-".to_owned() + &version.id + ".zip");
     if std::fs::exists(&output_file).unwrap_or_default() {
         std::fs::remove_file(&output_file)?;
@@ -92,7 +99,10 @@ pub async fn install(
     zip.start_file("patches/net.minecraft.json", SimpleFileOptions::default())?;
     zip.write_all(minecraft_patch_json.as_bytes())?;
 
-    let extra_libs = meta::fetch_profile_libraries(&version, &loader_type, &loader_version).await?;
+    info!("Fetching library information...");
+
+    let extra_libs =
+        meta::fetch_profile_libraries(&intermediary_version, &loader_type, &loader_version).await?;
 
     let pack_components = transformed_pack_json["components"].as_array_mut().unwrap();
     for library in extra_libs {

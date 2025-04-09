@@ -191,7 +191,7 @@ pub struct ProfileJsonLibrary {
 }
 
 pub async fn fetch_profile_libraries(
-    version: &MinecraftVersion,
+    version: &IntermediaryVersion,
     loader_type: &LoaderType,
     loader_version: &LoaderVersion,
 ) -> Result<Vec<ProfileJsonLibrary>, InstallerError> {
@@ -201,7 +201,7 @@ pub async fn fetch_profile_libraries(
                 + &format!(
                     "/v3/versions/{}-loader/{}/{}/profile/json",
                     loader_type.get_name(),
-                    version.id,
+                    version.version,
                     loader_version.version
                 ),
         )
