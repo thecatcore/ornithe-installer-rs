@@ -32,10 +32,10 @@ jobs:
           - build: windows-aarch64
             os: windows-latest
             target: aarch64-pc-windows-msvc
-          - build: mac-x86
+          - build: macos-x86
             os: macos-latest
             target: x86_64-apple-darwin
-          - build: mac-aarch64
+          - build: macos-aarch64
             os: macos-latest
             target: aarch64-apple-darwin
     runs-on: ${{ matrix.os }}
@@ -61,11 +61,13 @@ jobs:
       - uses: gradle/actions/wrapper-validation@v3
       - name: Run Cargo
         run: cargo build --release --target ${{ matrix.target }}
+      - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs.bin"
+        if: runner.os != 'Windows'
       - uses: actions/upload-artifact@v4
         with:
           name: Artifacts ${{ matrix.target }}
           path: |
-             target/**/ornithe-installer-rs*
+             target/${{ matrix.target }}/release/ornithe-installer-rs*
              !target/**/ornithe-installer-rs.d
              !target/**/build/
       - run: ./gradlew publish --stacktrace
@@ -81,4 +83,4 @@ jobs:
           SNAPSHOTS_USERNAME: ${{ secrets.NEW_MAVEN_SNAPSHOT_USERNAME }}
           SNAPSHOTS_PASSWORD: ${{ secrets.NEW_MAVEN_SNAPSHOT_PASSWORD }}
           TARGET: ${{ matrix.target }}
-          OS: ${{ matrix.os }}
+          OS: ${{ matrix.build }}

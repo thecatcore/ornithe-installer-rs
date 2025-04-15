@@ -25,18 +25,19 @@ publishing {
         val target = env["TARGET"]
         val os = env["OS"]
 
-        /* Note: this publication depends on files output by
+        /*
+         * Note: this publication depends on files output by
          * cargo and environment variables currently only present in the
          * "Publish" github action. Running this outside the GHA environment WILL fail.
          */
         create<MavenPublication>("mavenCargo") {
             groupId = "net.ornithemc.ornithe-installer-rs"
-            artifactId = "$os-$target"
+            artifactId = "$os"
 
             artifact {
                 file(
-                    "$projectDir/target/$target/release/" + if (os?.contains("windows") == true) // thanks kotlin
-                        "ornithe-installer.exe" else "ornithe-installer"
+                    "$projectDir/target/$target/release/ornithe-installer-rs." + if (os?.contains("windows") == true) // thanks kotlin
+                        "exe" else "bin"
                 )
             }
         }
