@@ -2,6 +2,9 @@
 name = "ornithe-installer-rs"
 version = "0.1.0"
 edition = "2024"
+authors = [
+    "moehreag"
+]
 
 [dependencies]
 anyhow = "1.0.97"
@@ -21,3 +24,11 @@ tauri-rfd = "0.1.0"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 webbrowser = "1.0.4"
 zip = { version = "2.6.1", features = ["deflate-flate2"] }
+
+[build-dependencies]
+embed-resource = "1.6.0"
+winres = "0.1.11"
+
+[profile.release]
+lto = true
+opt-level = 's'

@@ -233,7 +233,7 @@ async fn get_mmc_launch_json(
             }
             minecraft_arguments = combined.trim().to_owned();
 
-            traits.push("FirstThreadOnMaxOs");
+            traits.push("FirstThreadOnMacOs");
         }
     }
 
