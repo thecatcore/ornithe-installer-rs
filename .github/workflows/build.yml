@@ -51,3 +51,5 @@ jobs:
           name: CI builds (${{ matrix.build }})
           path: |
             target/**/ornithe-installer-rs*
+            !target/**/ornithe-installer-rs.d
+            !target/**/build/
