@@ -39,6 +39,7 @@ pub async fn run() {
                         .default_value(super::current_location())
                         .value_parser(value_parser!(PathBuf)),
                 )
+                .arg(arg!(-z --"generate-zip" <VALUE> "Whether to generate an instance zip instead of installing into the directory"))
                 .arg(arg!(-c --"copy-profile-path" <VALUE> "Whether to copy the path of the generated profile to the clipboard")
                 .default_value("false")
             .value_parser(value_parser!(bool)))),
@@ -201,12 +202,14 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
         let loader_version = get_loader_version(matches, loader_versions)?;
         let output_dir = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let copy_profile_path = matches.get_flag("copy-profile-path");
+        let generate_zip = matches.get_flag("generate-zip");
         return crate::actions::mmc_pack::install(
             minecraft_version,
             loader_type,
             loader_version,
             output_dir,
             copy_profile_path,
+            generate_zip,
         )
         .await;
     }

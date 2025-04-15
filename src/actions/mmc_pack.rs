@@ -1,4 +1,4 @@
-use std::{io::Write, path::PathBuf};
+use std::{fs::File, io::Write, path::PathBuf};
 
 use log::info;
 use serde_json::{Value, json};
@@ -23,6 +23,7 @@ pub async fn install(
     loader_version: LoaderVersion,
     output_dir: PathBuf,
     copy_profile_path: bool,
+    generate_zip: bool,
 ) -> Result<(), InstallerError> {
     if !output_dir.exists() {
         std::fs::create_dir_all(&output_dir)?;
@@ -68,41 +69,52 @@ pub async fn install(
 
     let minecraft_patch_json = get_mmc_launch_json(&version, &lwjgl_version).await?;
 
-    info!("Generating instance zip...");
+    let output_file = if generate_zip {
+        output_dir.join("Ornithe-".to_owned() + &version.id + ".zip")
+    } else {
+        output_dir.join("Ornithe-".to_owned() + &version.id)
+    };
 
-    let output_file = output_dir.join("Ornithe-".to_owned() + &version.id + ".zip");
-    if std::fs::exists(&output_file).unwrap_or_default() {
-        std::fs::remove_file(&output_file)?;
-    }
-    let file = std::fs::File::create_new(&output_file)?;
-    let mut zip = ZipWriter::new(file);
+    info!("Fetching library information...");
 
-    zip.start_file("instance.cfg", SimpleFileOptions::default())?;
+    let extra_libs =
+        meta::fetch_profile_libraries(&intermediary_version, &loader_type, &loader_version).await?;
+
+    let mut zip: Box<dyn Writer> = if generate_zip {
+        info!("Generating instance zip...");
+
+        if std::fs::exists(&output_file).unwrap_or_default() {
+            std::fs::remove_file(&output_file)?;
+        }
+        let file = std::fs::File::create_new(&output_file)?;
+        Box::new(ZipWriter::new(file))
+    } else {
+        info!("Generating output files...");
+
+        Box::new(output_file.clone())
+    };
+
     let mut instance_cfg = INSTANCE_CONFIG.replace("${mc_version}", &version.id);
 
     if cfg!(all(any(unix), not(target_os = "macos"))) {
         instance_cfg += "\nOverrideCommands=true\nWrapperCommand=env __GL_THREADED_OPTIMIZATIONS=0";
     }
 
-    zip.write_all(instance_cfg.as_bytes())?;
+    zip.write_file("instance.cfg", instance_cfg.as_bytes())?;
 
-    zip.start_file("ornithe.png", SimpleFileOptions::default())?;
-    zip.write_all(crate::ORNITHE_ICON_BYTES)?;
+    zip.write_file("ornithe.png", crate::ORNITHE_ICON_BYTES)?;
 
-    zip.add_directory("patches", SimpleFileOptions::default())?;
-    zip.start_file(
+    zip.create_dir("patches")?;
+
+    zip.write_file(
         "patches/net.fabricmc.intermediary.json",
-        SimpleFileOptions::default(),
+        transformed_intermediary_patch.as_bytes(),
     )?;
-    zip.write_all(transformed_intermediary_patch.as_bytes())?;
 
-    zip.start_file("patches/net.minecraft.json", SimpleFileOptions::default())?;
-    zip.write_all(minecraft_patch_json.as_bytes())?;
-
-    info!("Fetching library information...");
-
-    let extra_libs =
-        meta::fetch_profile_libraries(&intermediary_version, &loader_type, &loader_version).await?;
+    zip.write_file(
+        "patches/net.minecraft.json",
+        minecraft_patch_json.as_bytes(),
+    )?;
 
     let pack_components = transformed_pack_json["components"].as_array_mut().unwrap();
     for library in extra_libs {
@@ -118,11 +130,7 @@ pub async fn install(
             .get((colons.clone().next().unwrap() + 1)..colons.clone().last().unwrap())
             .unwrap();
         let version = library.name.get(0..(colons.last().unwrap() + 1)).unwrap();
-        zip.start_file(
-            "patches/".to_owned() + &uid + ".json",
-            SimpleFileOptions::default(),
-        )?;
-        zip.write_all(
+        zip.write_file(&("patches/".to_owned() + &uid + ".json"), 
             format!(r#"{{"formatVersion": 1, "libraries": [{{"name": "{}","url": "{}"}}], "name": "{}", "type": "release", "uid": "{}", "version": "{}"}}"#,
              library.name, library.url, lib_name, uid, version).as_bytes())?;
 
@@ -133,15 +141,17 @@ pub async fn install(
         }));
     }
 
-    zip.start_file("mmc-pack.json", SimpleFileOptions::default())?;
-    zip.write_all(&serde_json::to_vec_pretty(&transformed_pack_json)?)?;
-
-    zip.finish()?;
+    zip.write_file(
+        "mmc-pack.json",
+        &serde_json::to_vec_pretty(&transformed_pack_json)?,
+    )?;
 
     if copy_profile_path {
         cli_clipboard::set_contents(output_file.to_string_lossy().into_owned())
             .map_err(|_| InstallerError("Failed to copy profile path".to_owned()))?;
     }
+
+    info!("Done!");
 
     Ok(())
 }
@@ -268,4 +278,36 @@ async fn get_mmc_launch_json(
     }
 
     Ok(serde_json::to_string_pretty(&json)?)
+}
+
+trait Writer {
+    fn write_file(&mut self, path: &str, buf: &[u8]) -> Result<(), InstallerError>;
+
+    fn create_dir(&mut self, path: &str) -> Result<(), InstallerError>;
+}
+
+impl Writer for PathBuf {
+    fn write_file(&mut self, path: &str, buf: &[u8]) -> Result<(), InstallerError> {
+        let new_file = self.join(path);
+        let mut file = std::fs::File::create(new_file)?;
+        file.write_all(buf)?;
+        Ok(())
+    }
+
+    fn create_dir(&mut self, path: &str) -> Result<(), InstallerError> {
+        let new_file = self.join(path);
+        std::fs::create_dir_all(new_file)?;
+        Ok(())
+    }
+}
+
+impl Writer for ZipWriter<File> {
+    fn write_file(&mut self, path: &str, buf: &[u8]) -> Result<(), InstallerError> {
+        self.start_file(path, SimpleFileOptions::default())?;
+        Ok(self.write_all(buf)?)
+    }
+
+    fn create_dir(&mut self, path: &str) -> Result<(), InstallerError> {
+        Ok(self.add_directory(path, SimpleFileOptions::default())?)
+    }
 }

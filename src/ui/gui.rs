@@ -92,6 +92,7 @@ struct App {
     mmc_output_location: String,
     server_install_location: String,
     copy_generated_location: bool,
+    generate_zip: bool,
     download_minecraft_server: bool,
     installation_task: Option<JoinHandle<Result<(), InstallerError>>>,
 }
@@ -140,6 +141,7 @@ impl App {
             mmc_output_location: super::current_location(),
             server_install_location: super::server_location(),
             copy_generated_location: false,
+            generate_zip: true,
             download_minecraft_server: true,
             installation_task: None,
         };
@@ -259,9 +261,10 @@ impl eframe::App for App {
                 });
 
                 ui.add_space(15.0);
-                ui.label(match self.mode {
-                    Mode::MMC => "Output Location",
-                    _ => "Install Location",
+                ui.label(if self.mode == Mode::MMC && self.generate_zip {
+                    "Output Location"
+                } else {
+                    "Install Location"
                 });
                 ui.horizontal(|ui| match self.mode {
                     Mode::MMC => {
@@ -305,7 +308,7 @@ impl eframe::App for App {
                     }
                 });
             });
-            ui.vertical_centered(|ui| {
+            {
                 ui.add_space(15.0);
                 match self.mode {
                     Mode::Client => {
@@ -318,13 +321,17 @@ impl eframe::App for App {
                         );
                     }
                     Mode::MMC => {
-                        ui.checkbox(
-                            &mut self.copy_generated_location,
-                            "Copy Profile Path to Clipboard",
-                        );
+                        ui.horizontal(|ui| {
+                            ui.checkbox(
+                                &mut self.copy_generated_location,
+                                "Copy Profile Path to Clipboard",
+                            );
+
+                            ui.checkbox(&mut self.generate_zip, "Generate Instance Zip");
+                        });
                     }
                 }
-            });
+            }
             ui.add_space(15.0);
             ui.vertical_centered(|ui| {
                 let mut install_button =
@@ -385,6 +392,7 @@ impl eframe::App for App {
                                 let loader_type = self.selected_loader_type.clone();
                                 let location = Path::new(&self.mmc_output_location).to_path_buf();
                                 let copy_profile_path = self.copy_generated_location;
+                                let generate_zip = self.generate_zip;
                                 let handle = tokio::spawn(async move {
                                     crate::actions::mmc_pack::install(
                                         selected_version,
@@ -392,6 +400,7 @@ impl eframe::App for App {
                                         loader_version,
                                         location,
                                         copy_profile_path,
+                                        generate_zip,
                                     )
                                     .await
                                 });
