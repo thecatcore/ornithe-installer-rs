@@ -12,6 +12,7 @@ use crate::{
 
 pub async fn run() {
     let matches = command!()
+        .arg_required_else_help(true)
         .name("Ornithe Installer")
         .subcommand(
             add_arguments(Command::new("client")
@@ -39,9 +40,10 @@ pub async fn run() {
                         .default_value(super::current_location())
                         .value_parser(value_parser!(PathBuf)),
                 )
-                .arg(arg!(-z --"generate-zip" <VALUE> "Whether to generate an instance zip instead of installing into the directory"))
+                .arg(arg!(-z --"generate-zip" <VALUE> "Whether to generate an instance zip instead of installing into the directory")
+                    .default_value("true").value_parser(value_parser!(bool)))
                 .arg(arg!(-c --"copy-profile-path" <VALUE> "Whether to copy the path of the generated profile to the clipboard")
-                .default_value("false")
+                    .default_value("false").value_parser(value_parser!(bool))
             .value_parser(value_parser!(bool)))),
         )
         .subcommand(
@@ -55,8 +57,9 @@ pub async fn run() {
                 )
                 .arg(arg!(--"download-minecraft" "Whether to download the minecraft server jar"))
                 .subcommand(Command::new("run").about("Install and run the server")
-                .arg(arg!(--args <ARGS> "Java arguments to pass to the server (before the server jar)"))
-                .arg(arg!(--java <PATH> "The java binary to use to run the server").value_parser(value_parser!(PathBuf)))),
+                    .arg(arg!(--args <ARGS> "Java arguments to pass to the server (before the server jar)"))
+                    .arg(arg!(--java <PATH> "The java binary to use to run the server").value_parser(value_parser!(PathBuf))
+                )),
         ))
         .subcommand(
             Command::new("game-versions")
@@ -201,8 +204,11 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
         let loader_versions = loader_versions.get(&loader_type).unwrap();
         let loader_version = get_loader_version(matches, loader_versions)?;
         let output_dir = matches.get_one::<PathBuf>("dir").unwrap().clone();
-        let copy_profile_path = matches.get_flag("copy-profile-path");
-        let generate_zip = matches.get_flag("generate-zip");
+        let copy_profile_path = matches
+            .get_one::<bool>("copy-profile-path")
+            .unwrap()
+            .clone();
+        let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
         return crate::actions::mmc_pack::install(
             minecraft_version,
             loader_type,

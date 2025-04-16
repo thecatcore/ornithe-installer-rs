@@ -17,24 +17,20 @@ use crate::{
 
 use super::Mode;
 
-pub async fn run() {
+pub async fn run() -> Result<(), InstallerError> {
     info!("Starting GUI installer...");
-    let app = App::create().await;
-    match app {
-        Ok(app) => match create_window(app).await {
-            Ok(_) => {}
-            Err(e) => {
-                error!("{}", e.0);
-                display_dialog("Ornithe Installer Error", &e.0)
-            }
-        },
-        Err(_) => {
-            error!("Failed to launch gui!");
-        }
+
+    let res = create_window().await;
+    if let Err(e) = res {
+        error!("{}", e.0);
+        display_dialog("Ornithe Installer Error", &e.0);
+        return Err(e);
     }
+
+    Ok(())
 }
 
-async fn create_window(app: App) -> Result<(), InstallerError> {
+async fn create_window() -> Result<(), InstallerError> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([630.0, 490.0])
@@ -46,6 +42,7 @@ async fn create_window(app: App) -> Result<(), InstallerError> {
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
+    let app = App::create().await?;
 
     eframe::run_native(
         &("Ornithe Installer ".to_owned() + crate::VERSION),
