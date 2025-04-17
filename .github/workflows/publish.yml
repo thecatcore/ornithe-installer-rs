@@ -70,7 +70,7 @@ jobs:
           MAVEN_USERNAME: ${{ secrets.NEW_MAVEN_USERNAME }}
           MAVEN_PASSWORD: ${{ secrets.NEW_MAVEN_PASSWORD }}
           TARGET: ${{ matrix.target }}
-          OS: ${{ matrix.os }}
+          OS: ${{ matrix.build }}
       - run: ./gradlew publish --stacktrace
         env:
           SNAPSHOTS_URL: ${{ secrets.NEW_MAVEN_SNAPSHOT_URL }}
