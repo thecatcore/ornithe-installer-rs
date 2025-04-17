@@ -77,7 +77,7 @@ fn server_dir(default: &str) -> String {
         .to_owned()
 }
 
-#[cfg(any(unix, target_os = "macos"))]
+#[cfg(any(unix))]
 pub fn server_location() -> String {
     server_dir("/")
 }
