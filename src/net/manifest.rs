@@ -6,8 +6,8 @@ use crate::errors::InstallerError;
 
 use super::GameSide;
 
-const LAUNCHER_META_URL: &str = "https://ornithemc.net/mc-versions/version_manifest.json";
-const VERSION_META_URL: &str = "https://ornithemc.net/mc-versions/version/manifest/{}.json";
+const LAUNCHER_META_URL: &str = "https://skyrising.github.io/mc-versions/version_manifest.json";
+const VERSION_META_URL: &str = "https://skyrising.github.io/mc-versions/version/manifest/{}.json";
 
 pub async fn fetch_versions() -> Result<VersionManifest, InstallerError> {
     super::CLIENT
