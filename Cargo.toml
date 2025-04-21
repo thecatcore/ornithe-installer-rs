@@ -1,6 +1,6 @@
 [package]
 name = "ornithe-installer-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = [
     "moehreag"
@@ -18,9 +18,9 @@ egui-dropdown = "0.13.0"
 env_logger = "0.11.8"
 log = "0.4.27"
 reqwest = { version = "0.12.15", features = ["json"] }
+rfd = "0.15.3"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
-tauri-rfd = "0.1.0"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 webbrowser = "1.0.4"
 zip = { version = "2.6.1", features = ["deflate-flate2"] }

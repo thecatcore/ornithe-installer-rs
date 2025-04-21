@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::Path};
 use egui::{Button, ComboBox, IconData, RichText, Sense, Theme, Vec2};
 use egui_dropdown::DropDownBox;
 use log::{error, info};
-use rfd::{AsyncMessageDialog, FileDialog, MessageButtons};
+use rfd::{AsyncMessageDialog, FileDialog, MessageButtons, MessageDialogResult};
 use tokio::task::JoinHandle;
 
 use crate::{
@@ -58,7 +58,7 @@ fn display_dialog(title: &str, message: &str) {
 
 fn display_dialog_ext<F>(title: &str, message: &str, buttons: MessageButtons, after: F)
 where
-    F: FnOnce(bool) -> (),
+    F: FnOnce(MessageDialogResult) -> (),
     F: Send,
     F: 'static,
 {
@@ -66,7 +66,7 @@ where
     let dialog = AsyncMessageDialog::new()
         .set_title(title)
         .set_level(rfd::MessageLevel::Info)
-        .set_description(&message)
+        .set_description(message)
         .set_buttons(buttons);
     tokio::spawn(async move {
         let out = dialog.show().await;
@@ -431,7 +431,7 @@ impl eframe::App for App {
                             "Ornithe has been successfully installed.\nMost mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder.\nWould you like to open OSL's modrinth page now?",
                             MessageButtons::YesNo,
                             |res| {
-                                if res {
+                                if res == MessageDialogResult::Yes {
                                     if webbrowser::open(crate::OSL_MODRINTH_URL).is_err() {
                                         display_dialog("Failed to open modrinth", &("Failed to open modrinth page for Ornithe Standard Libraries.\nYou can find it at ".to_owned()+crate::OSL_MODRINTH_URL).as_str());
                                     }
