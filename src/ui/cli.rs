@@ -99,7 +99,7 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
 
         let mut out = String::new();
         for version in versions.get(&loader_type).unwrap() {
-            if betas || !version.version.contains("-") {
+            if betas || version.is_stable() {
                 out += &(version.version.clone() + " ");
             }
         }

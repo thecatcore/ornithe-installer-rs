@@ -21,6 +21,16 @@ pub struct LoaderVersion {
     version_no_side: String,
 }
 
+impl LoaderVersion {
+    pub fn is_beta(&self) -> bool {
+        self.version.contains("-")
+    }
+
+    pub fn is_stable(&self) -> bool {
+        !self.is_beta()
+    }
+}
+
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub enum LoaderType {
     Fabric,

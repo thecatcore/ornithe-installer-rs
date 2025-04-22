@@ -103,6 +103,11 @@ struct App {
     file_picker_open: bool,
 }
 
+struct FilePickResult {
+    mode: Mode,
+    path: String,
+}
+
 impl App {
     async fn create() -> Result<App, InstallerError> {
         let mut available_minecraft_versions = Vec::new();
@@ -191,251 +196,187 @@ impl App {
             });
         }
     }
-}
 
-impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-        ctx.set_zoom_factor(1.5);
-        ctx.options_mut(|opt| opt.fallback_theme = Theme::Light);
+    fn add_environment_options(&mut self, ui: &mut egui::Ui) {
+        ui.label("Environment");
+        ui.horizontal(|ui| {
+            ui.radio_value(&mut self.mode, Mode::Client, "Client (Official Launcher)");
+            ui.radio_value(&mut self.mode, Mode::MMC, "MultiMC/PrismLauncher");
+            ui.radio_value(&mut self.mode, Mode::Server, "Server");
+        });
+    }
 
-        if let Ok(result) = self.file_picker_channel.1.try_recv() {
-            self.file_picker_open = false;
-            if let Some(result) = result {
-                match result.mode {
-                    Mode::Client => self.client_install_location = result.path,
-                    Mode::Server => self.server_install_location = result.path,
-                    Mode::MMC => self.mmc_output_location = result.path,
+    fn add_minecraft_version(&mut self, ui: &mut egui::Ui) {
+        ui.label("Minecraft Version");
+        ui.horizontal(|ui| {
+            ui.add(
+                DropDownBox::from_iter(
+                    &self
+                        .available_minecraft_versions
+                        .iter()
+                        .filter(|v| {
+                            self.available_intermediary_versions.contains(&v.id)
+                                || self.available_intermediary_versions.contains(
+                                    &(v.id.clone()
+                                        + "-"
+                                        + match self.mode {
+                                            Mode::Server => "server",
+                                            _ => "client",
+                                        }),
+                                )
+                        })
+                        .filter(|v| self.show_snapshots || v._type == "release")
+                        .map(|v| v.id.clone())
+                        .collect::<Vec<String>>(),
+                    "minecraft_version",
+                    &mut self.selected_minecraft_version,
+                    |ui, text| ui.selectable_label(false, text),
+                )
+                .max_height(130.0)
+                .hint_text("Search available versions..."),
+            );
+            ui.checkbox(&mut self.show_snapshots, "Show Snapshots")
+        });
+    }
+
+    fn add_loader(&mut self, ui: &mut egui::Ui) {
+        ui.label("Loader");
+        ui.horizontal(|ui| {
+            ComboBox::from_id_salt("loader_type")
+                .selected_text(format!(
+                    "{} Loader",
+                    &self.selected_loader_type.get_localized_name()
+                ))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(
+                        &mut self.selected_loader_type,
+                        LoaderType::Fabric,
+                        "Fabric Loader",
+                    );
+                    ui.selectable_value(
+                        &mut self.selected_loader_type,
+                        LoaderType::Quilt,
+                        "Quilt Loader",
+                    );
+                });
+
+            ui.label("Version: ");
+            ComboBox::from_id_salt("loader_version")
+                .selected_text(format!("{}", &self.selected_loader_version))
+                .show_ui(ui, |ui| {
+                    for ele in self
+                        .available_loader_versions
+                        .get(&self.selected_loader_type)
+                        .unwrap()
+                    {
+                        if self.show_betas || ele.is_stable() {
+                            ui.selectable_value(
+                                &mut self.selected_loader_version,
+                                ele.version.clone(),
+                                ele.version.clone(),
+                            );
+                        }
+                    }
+                });
+            let checkbox_response = ui.checkbox(&mut self.show_betas, "Show Betas");
+            if !self
+                .available_loader_versions
+                .get(&self.selected_loader_type)
+                .unwrap()
+                .iter()
+                .find(|v| v.version == self.selected_loader_version)
+                .is_some()
+                || checkbox_response.clicked()
+            {
+                self.selected_loader_version = self
+                    .available_loader_versions
+                    .get(&self.selected_loader_type)
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.version.clone())
+                    .filter(|v| self.show_betas || !v.contains("-"))
+                    .next()
+                    .unwrap()
+                    .clone();
+            }
+        });
+    }
+
+    fn run_installation(&mut self) {
+        if let Some(version) = self
+            .available_minecraft_versions
+            .iter()
+            .find(|v| v.id == self.selected_minecraft_version)
+        {
+            let selected_version = version.clone();
+            let loader_version = self
+                .available_loader_versions
+                .get(&self.selected_loader_type)
+                .unwrap()
+                .iter()
+                .find(|v| v.version == self.selected_loader_version)
+                .unwrap()
+                .clone();
+            match self.mode {
+                Mode::Client => {
+                    let loader_type = self.selected_loader_type.clone();
+                    let location = Path::new(&self.client_install_location).to_path_buf();
+                    let create_profile = self.create_profile;
+                    let handle = tokio::spawn(async move {
+                        crate::actions::client::install(
+                            selected_version,
+                            loader_type,
+                            loader_version,
+                            location,
+                            create_profile,
+                        )
+                        .await
+                    });
+                    self.installation_task = Some(handle);
+                }
+                Mode::Server => {
+                    let loader_type = self.selected_loader_type.clone();
+                    let location = Path::new(&self.server_install_location).to_path_buf();
+                    let download_server = self.download_minecraft_server;
+                    self.installation_task = Some(tokio::spawn(async move {
+                        crate::actions::server::install(
+                            selected_version,
+                            loader_type,
+                            loader_version,
+                            location,
+                            download_server,
+                        )
+                        .await
+                    }));
+                }
+                Mode::MMC => {
+                    let loader_type = self.selected_loader_type.clone();
+                    let location = Path::new(&self.mmc_output_location).to_path_buf();
+                    let copy_profile_path = self.copy_generated_location;
+                    let generate_zip = self.generate_zip;
+                    let handle = tokio::spawn(async move {
+                        crate::actions::mmc_pack::install(
+                            selected_version,
+                            loader_type,
+                            loader_version,
+                            location,
+                            copy_profile_path,
+                            generate_zip,
+                        )
+                        .await
+                    });
+                    self.installation_task = Some(handle);
                 }
             }
+        } else {
+            display_dialog(
+                "Installation Failed",
+                "No supported Minecraft version is selected",
+            );
         }
+    }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.add_enabled_ui(!self.file_picker_open, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.heading("Ornithe Installer");
-                });
-                ui.vertical(|ui| {
-                    ui.add_space(15.0);
-
-                    ui.label("Environment");
-                    ui.horizontal(|ui| {
-                        ui.radio_value(&mut self.mode, Mode::Client, "Client (Official Launcher)");
-                        ui.radio_value(&mut self.mode, Mode::MMC, "MultiMC/PrismLauncher");
-                        ui.radio_value(&mut self.mode, Mode::Server, "Server");
-                    });
-
-                    ui.add_space(15.0);
-                    ui.label("Minecraft Version");
-                    ui.horizontal(|ui| {
-                        ui.add(
-                            DropDownBox::from_iter(
-                                &self
-                                    .available_minecraft_versions
-                                    .iter()
-                                    .filter(|v| {
-                                        self.available_intermediary_versions.contains(&v.id)
-                                            || self.available_intermediary_versions.contains(
-                                                &(v.id.clone()
-                                                    + "-"
-                                                    + match self.mode {
-                                                        Mode::Server => "server",
-                                                        _ => "client",
-                                                    }),
-                                            )
-                                    })
-                                    .filter(|v| self.show_snapshots || v._type == "release")
-                                    .map(|v| v.id.clone())
-                                    .collect::<Vec<String>>(),
-                                "minecraft_version",
-                                &mut self.selected_minecraft_version,
-                                |ui, text| ui.selectable_label(false, text),
-                            )
-                            .max_height(130.0)
-                            .hint_text("Search available versions..."),
-                        );
-                        ui.checkbox(&mut self.show_snapshots, "Show Snapshots")
-                    });
-                    ui.add_space(15.0);
-                    ui.label("Loader");
-                    ui.horizontal(|ui| {
-                        ComboBox::from_id_salt("loader_type")
-                            .selected_text(format!(
-                                "{} Loader",
-                                &self.selected_loader_type.get_localized_name()
-                            ))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut self.selected_loader_type,
-                                    LoaderType::Fabric,
-                                    "Fabric Loader",
-                                );
-                                ui.selectable_value(
-                                    &mut self.selected_loader_type,
-                                    LoaderType::Quilt,
-                                    "Quilt Loader",
-                                );
-                            });
-
-                        ui.label("Version: ");
-                        ComboBox::from_id_salt("loader_version")
-                            .selected_text(format!("{}", &self.selected_loader_version))
-                            .show_ui(ui, |ui| {
-                                for ele in self
-                                    .available_loader_versions
-                                    .get(&self.selected_loader_type)
-                                    .unwrap()
-                                {
-                                    if self.show_betas || !ele.version.contains("-") {
-                                        ui.selectable_value(
-                                            &mut self.selected_loader_version,
-                                            ele.version.clone(),
-                                            ele.version.clone(),
-                                        );
-                                    }
-                                }
-                            });
-                        let checkbox_response = ui.checkbox(&mut self.show_betas, "Show Betas");
-                        if !self
-                            .available_loader_versions
-                            .get(&self.selected_loader_type)
-                            .unwrap()
-                            .iter()
-                            .find(|v| v.version == self.selected_loader_version)
-                            .is_some()
-                            || checkbox_response.clicked()
-                        {
-                            self.selected_loader_version = self
-                                .available_loader_versions
-                                .get(&self.selected_loader_type)
-                                .unwrap()
-                                .iter()
-                                .map(|v| v.version.clone())
-                                .filter(|v| self.show_betas || !v.contains("-"))
-                                .next()
-                                .unwrap()
-                                .clone();
-                        }
-                    });
-
-                    ui.add_space(15.0);
-                    ui.label(if self.mode == Mode::MMC && self.generate_zip {
-                        "Output Location"
-                    } else {
-                        "Install Location"
-                    });
-                    ui.horizontal(|ui| self.add_location_picker(frame, ui));
-                });
-                {
-                    ui.add_space(15.0);
-                    match self.mode {
-                        Mode::Client => {
-                            ui.checkbox(&mut self.create_profile, "Generate Profile");
-                        }
-                        Mode::Server => {
-                            ui.checkbox(
-                                &mut self.download_minecraft_server,
-                                "Download Minecraft Server",
-                            );
-                        }
-                        Mode::MMC => {
-                            ui.horizontal(|ui| {
-                                ui.checkbox(
-                                    &mut self.copy_generated_location,
-                                    "Copy Profile Path to Clipboard",
-                                );
-
-                                ui.checkbox(&mut self.generate_zip, "Generate Instance Zip");
-                            });
-                        }
-                    }
-                }
-                ui.add_space(15.0);
-                ui.vertical_centered(|ui| {
-                    let mut install_button = Button::new(RichText::new("Install").heading())
-                        .min_size(Vec2::new(100.0, 0.0));
-                    if self.installation_task.is_some() {
-                        install_button = install_button.sense(Sense::empty());
-                    }
-                    if ui.add(install_button).clicked() {
-                        if let Some(version) = self
-                            .available_minecraft_versions
-                            .iter()
-                            .find(|v| v.id == self.selected_minecraft_version)
-                        {
-                            let selected_version = version.clone();
-                            let loader_version = self
-                                .available_loader_versions
-                                .get(&self.selected_loader_type)
-                                .unwrap()
-                                .iter()
-                                .find(|v| v.version == self.selected_loader_version)
-                                .unwrap()
-                                .clone();
-                            match self.mode {
-                                Mode::Client => {
-                                    let loader_type = self.selected_loader_type.clone();
-                                    let location =
-                                        Path::new(&self.client_install_location).to_path_buf();
-                                    let create_profile = self.create_profile;
-                                    let handle = tokio::spawn(async move {
-                                        crate::actions::client::install(
-                                            selected_version,
-                                            loader_type,
-                                            loader_version,
-                                            location,
-                                            create_profile,
-                                        )
-                                        .await
-                                    });
-                                    self.installation_task = Some(handle);
-                                }
-                                Mode::Server => {
-                                    let loader_type = self.selected_loader_type.clone();
-                                    let location =
-                                        Path::new(&self.server_install_location).to_path_buf();
-                                    let download_server = self.download_minecraft_server;
-                                    self.installation_task = Some(tokio::spawn(async move {
-                                        crate::actions::server::install(
-                                            selected_version,
-                                            loader_type,
-                                            loader_version,
-                                            location,
-                                            download_server,
-                                        )
-                                        .await
-                                    }));
-                                }
-                                Mode::MMC => {
-                                    let loader_type = self.selected_loader_type.clone();
-                                    let location =
-                                        Path::new(&self.mmc_output_location).to_path_buf();
-                                    let copy_profile_path = self.copy_generated_location;
-                                    let generate_zip = self.generate_zip;
-                                    let handle = tokio::spawn(async move {
-                                        crate::actions::mmc_pack::install(
-                                            selected_version,
-                                            loader_type,
-                                            loader_version,
-                                            location,
-                                            copy_profile_path,
-                                            generate_zip,
-                                        )
-                                        .await
-                                    });
-                                    self.installation_task = Some(handle);
-                                }
-                            }
-                        } else {
-                            display_dialog(
-                                "Installation Failed",
-                                "No supported Minecraft version is selected",
-                            );
-                        }
-                    }
-                });
-            });
-        });
-
+    fn monitor_installation(&mut self) {
         if let Some(task) = &self.installation_task {
             if task.is_finished() {
                 let handle = self.installation_task.take().unwrap();
@@ -465,9 +406,89 @@ impl eframe::App for App {
             }
         }
     }
+
+    fn add_additional_options(&mut self, ui: &mut egui::Ui) {
+        match self.mode {
+            Mode::Client => {
+                ui.checkbox(&mut self.create_profile, "Generate Profile");
+            }
+            Mode::Server => {
+                ui.checkbox(
+                    &mut self.download_minecraft_server,
+                    "Download Minecraft Server",
+                );
+            }
+            Mode::MMC => {
+                ui.horizontal(|ui| {
+                    ui.checkbox(
+                        &mut self.copy_generated_location,
+                        "Copy Profile Path to Clipboard",
+                    );
+
+                    ui.checkbox(&mut self.generate_zip, "Generate Instance Zip");
+                });
+            }
+        }
+    }
 }
 
-struct FilePickResult {
-    mode: Mode,
-    path: String,
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+        ctx.set_zoom_factor(1.5);
+        ctx.options_mut(|opt| opt.fallback_theme = Theme::Light);
+
+        if let Ok(result) = self.file_picker_channel.1.try_recv() {
+            self.file_picker_open = false;
+            if let Some(result) = result {
+                match result.mode {
+                    Mode::Client => self.client_install_location = result.path,
+                    Mode::Server => self.server_install_location = result.path,
+                    Mode::MMC => self.mmc_output_location = result.path,
+                }
+            }
+        }
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.add_enabled_ui(!self.file_picker_open, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.heading("Ornithe Installer");
+                });
+                ui.vertical(|ui| {
+                    ui.add_space(15.0);
+
+                    self.add_environment_options(ui);
+
+                    ui.add_space(15.0);
+                    self.add_minecraft_version(ui);
+                    ui.add_space(15.0);
+                    self.add_loader(ui);
+
+                    ui.add_space(15.0);
+                    ui.label(if self.mode == Mode::MMC && self.generate_zip {
+                        "Output Location"
+                    } else {
+                        "Install Location"
+                    });
+                    ui.horizontal(|ui| self.add_location_picker(frame, ui));
+                });
+
+                ui.add_space(15.0);
+                self.add_additional_options(ui);
+
+                ui.add_space(15.0);
+                ui.vertical_centered(|ui| {
+                    let mut install_button = Button::new(RichText::new("Install").heading())
+                        .min_size(Vec2::new(100.0, 0.0));
+                    if self.installation_task.is_some() {
+                        install_button = install_button.sense(Sense::empty());
+                    }
+                    if ui.add(install_button).clicked() {
+                        self.run_installation();
+                    }
+                });
+            });
+        });
+
+        self.monitor_installation();
+    }
 }
