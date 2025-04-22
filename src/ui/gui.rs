@@ -4,7 +4,7 @@ use std::{
     sync::mpsc::{Receiver, Sender},
 };
 
-use egui::{Button, ComboBox, IconData, RichText, Sense, Theme, Vec2};
+use egui::{Button, ComboBox, RichText, Sense, Theme, Vec2};
 use egui_dropdown::DropDownBox;
 use log::{error, info};
 use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
@@ -35,14 +35,12 @@ pub async fn run() -> Result<(), InstallerError> {
 }
 
 async fn create_window() -> Result<(), InstallerError> {
+    let data = eframe::icon_data::from_png_bytes(crate::ORNITHE_ICON_BYTES)
+        .expect("The Ornithe Icon is a valid PNG file");
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([630.0, 490.0])
-            .with_icon(IconData {
-                rgba: crate::ORNITHE_ICON_BYTES.to_vec(),
-                width: 512,
-                height: 512,
-            }),
+            .with_icon(data),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()
     };
