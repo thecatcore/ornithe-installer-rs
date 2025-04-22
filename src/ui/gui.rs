@@ -1,9 +1,13 @@
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::Path,
+    sync::mpsc::{Receiver, Sender},
+};
 
 use egui::{Button, ComboBox, IconData, RichText, Sense, Theme, Vec2};
 use egui_dropdown::DropDownBox;
 use log::{error, info};
-use rfd::{AsyncMessageDialog, FileDialog, MessageButtons, MessageDialogResult};
+use rfd::{AsyncFileDialog, AsyncMessageDialog, MessageButtons, MessageDialogResult};
 use tokio::task::JoinHandle;
 
 use crate::{
@@ -68,9 +72,9 @@ where
         .set_level(rfd::MessageLevel::Info)
         .set_description(message)
         .set_buttons(buttons);
+    let fut = dialog.show();
     tokio::spawn(async move {
-        let out = dialog.show().await;
-        after(out);
+        after(fut.await);
     });
 }
 
@@ -92,6 +96,11 @@ struct App {
     generate_zip: bool,
     download_minecraft_server: bool,
     installation_task: Option<JoinHandle<Result<(), InstallerError>>>,
+    file_picker_channel: (
+        Sender<Option<FilePickResult>>,
+        Receiver<Option<FilePickResult>>,
+    ),
+    file_picker_open: bool,
 }
 
 impl App {
@@ -140,16 +149,70 @@ impl App {
             copy_generated_location: false,
             generate_zip: true,
             download_minecraft_server: true,
+            file_picker_channel: std::sync::mpsc::channel(),
+            file_picker_open: false,
             installation_task: None,
         };
         Ok(app)
     }
+
+    fn add_location_picker(&mut self, frame: &mut eframe::Frame, ui: &mut egui::Ui) {
+        ui.text_edit_singleline(match self.mode {
+            Mode::Client => &mut self.client_install_location,
+            Mode::Server => &mut self.server_install_location,
+            Mode::MMC => &mut self.mmc_output_location,
+        });
+        let mut pick_button = Button::new("Pick Location");
+        if self.file_picker_open {
+            pick_button = pick_button.sense(Sense::empty());
+        }
+        if ui.add(pick_button).clicked() {
+            let picked = AsyncFileDialog::new()
+                .set_directory(Path::new(match self.mode {
+                    Mode::Client => &self.client_install_location,
+                    Mode::Server => &self.server_install_location,
+                    Mode::MMC => &self.mmc_output_location,
+                }))
+                .set_parent(&frame)
+                .pick_folder();
+            self.file_picker_open = true;
+            let sender = self.file_picker_channel.0.clone();
+            let mode = self.mode.clone();
+            let ctx = ui.ctx().clone();
+            tokio::spawn(async move {
+                let opt = picked.await;
+                let mut send = None;
+                if let Some(path) = opt {
+                    if let Some(path) = path.path().to_str() {
+                        send = Some(FilePickResult {
+                            mode,
+                            path: path.to_owned(),
+                        });
+                    }
+                }
+                let _ = sender.send(send);
+                ctx.request_repaint();
+            });
+        }
+    }
 }
 
 impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         ctx.set_zoom_factor(1.5);
         ctx.options_mut(|opt| opt.fallback_theme = Theme::Light);
+
+        if let Ok(result) = self.file_picker_channel.1.try_recv() {
+            self.file_picker_open = false;
+            if let Some(result) = result {
+                match result.mode {
+                    Mode::Client => self.client_install_location = result.path,
+                    Mode::Server => self.server_install_location = result.path,
+                    Mode::MMC => self.mmc_output_location = result.path,
+                }
+            }
+        }
+
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.heading("Ornithe Installer");
@@ -263,47 +326,7 @@ impl eframe::App for App {
                 } else {
                     "Install Location"
                 });
-                ui.horizontal(|ui| match self.mode {
-                    Mode::MMC => {
-                        ui.text_edit_singleline(&mut self.mmc_output_location);
-                        if ui.button("Pick Location").clicked() {
-                            let picked = FileDialog::new()
-                                .set_directory(Path::new(&self.mmc_output_location))
-                                .pick_folder();
-                            if let Some(path) = picked {
-                                if let Some(path) = path.to_str() {
-                                    self.mmc_output_location = path.to_owned();
-                                }
-                            }
-                        }
-                    }
-                    Mode::Client => {
-                        ui.text_edit_singleline(&mut self.client_install_location);
-                        if ui.button("Pick Location").clicked() {
-                            let picked = FileDialog::new()
-                                .set_directory(Path::new(&self.client_install_location))
-                                .pick_folder();
-                            if let Some(path) = picked {
-                                if let Some(path) = path.to_str() {
-                                    self.client_install_location = path.to_owned();
-                                }
-                            }
-                        }
-                    }
-                    Mode::Server => {
-                        ui.text_edit_singleline(&mut self.server_install_location);
-                        if ui.button("Pick Location").clicked() {
-                            let picked = FileDialog::new()
-                                .set_directory(Path::new(&self.server_install_location))
-                                .pick_folder();
-                            if let Some(path) = picked {
-                                if let Some(path) = path.to_str() {
-                                    self.server_install_location = path.to_owned();
-                                }
-                            }
-                        }
-                    }
-                });
+                ui.horizontal(|ui| self.add_location_picker(frame, ui));
             });
             {
                 ui.add_space(15.0);
@@ -443,4 +466,9 @@ impl eframe::App for App {
             }
         }
     }
+}
+
+struct FilePickResult {
+    mode: Mode,
+    path: String,
 }
