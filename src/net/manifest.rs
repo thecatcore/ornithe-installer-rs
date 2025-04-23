@@ -136,6 +136,18 @@ impl MinecraftVersion {
             GameSide::Server => downloads.server,
         })
     }
+
+    pub fn is_snapshot(&self) -> bool {
+        self._type == "snapshot"
+    }
+
+    pub fn is_historical(&self) -> bool {
+        !self.is_release() && !self.is_snapshot() && self._type != "pending"
+    }
+
+    pub fn is_release(&self) -> bool {
+        self._type == "release"
+    }
 }
 
 #[allow(dead_code)]

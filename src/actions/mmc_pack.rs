@@ -72,7 +72,12 @@ pub async fn install(
     let output_file = if generate_zip {
         output_dir.join("Ornithe-".to_owned() + &version.id + ".zip")
     } else {
-        output_dir.join("Ornithe-".to_owned() + &version.id)
+        let dir = output_dir.join("Ornithe-".to_owned() + &version.id);
+        if std::fs::exists(&dir).unwrap_or_default() {
+            return Err(InstallerError("Instance already exists".to_string()));
+        }
+        std::fs::create_dir_all(&dir)?;
+        dir
     };
 
     info!("Fetching library information...");

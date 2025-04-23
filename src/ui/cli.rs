@@ -1,6 +1,7 @@
 use std::{io::Write, path::PathBuf};
 
 use clap::{ArgMatches, Command, arg, command, value_parser};
+use log::info;
 
 use crate::{
     errors::InstallerError,
@@ -9,6 +10,12 @@ use crate::{
         meta::{LoaderType, LoaderVersion},
     },
 };
+
+#[derive(PartialEq, Eq)]
+enum InstallationResult {
+    Installed,
+    NotInstalled,
+}
 
 pub async fn run() {
     let matches = command!()
@@ -40,7 +47,7 @@ pub async fn run() {
                         .default_value(super::current_location())
                         .value_parser(value_parser!(PathBuf)),
                 )
-                .arg(arg!(-z --"generate-zip" <VALUE> "Whether to generate an instance zip instead of installing into the directory")
+                .arg(arg!(-z --"generate-zip" <VALUE> "Whether to generate an instance zip instead of installing an instance into the directory")
                     .default_value("true").value_parser(value_parser!(bool)))
                 .arg(arg!(-c --"copy-profile-path" <VALUE> "Whether to copy the path of the generated profile to the clipboard")
                     .default_value("false").value_parser(value_parser!(bool))
@@ -67,7 +74,8 @@ pub async fn run() {
             .long_flag("list-game-versions")
             .long_flag_alias("list-minecraft-versions")
                 .about("List supported game versions")
-                .arg(arg!(-s --"show-snapshots" "Include snapshot versions")),
+                .arg(arg!(-s --"show-snapshots" "Include snapshot versions"))
+                .arg(arg!(--"show-historical" "Include historical versions")),
         )
         .subcommand(
             Command::new("loader-versions")
@@ -82,7 +90,16 @@ pub async fn run() {
         .get_matches();
 
     match parse(matches).await {
-        Ok(_) => {}
+        Ok(r) => {
+            if r == InstallationResult::Installed {
+                info!("Installation complete!");
+                info!("Ornithe has been successfully installed.");
+                info!(
+                    "Most mods require that you also download the Ornithe Standard Libraries mod and place it in your mods folder."
+                );
+                info!("You can find it at {}", crate::OSL_MODRINTH_URL);
+            }
+        }
         Err(e) => {
             std::io::stderr()
                 .write_all(("Failed to load Ornithe Installer CLI: ".to_owned() + &e.0).as_bytes())
@@ -91,7 +108,7 @@ pub async fn run() {
     }
 }
 
-async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
+async fn parse(matches: ArgMatches) -> Result<InstallationResult, InstallerError> {
     if let Some(matches) = matches.subcommand_matches("loader-versions") {
         let versions = crate::net::meta::fetch_loader_versions().await?;
         let loader_type = get_loader_type(matches)?;
@@ -120,7 +137,7 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
         )?;
         writeln!(std::io::stdout(), "{}", out)?;
 
-        return Ok(());
+        return Ok(InstallationResult::NotInstalled);
     }
 
     let minecraft_versions = crate::net::manifest::fetch_versions().await?;
@@ -140,14 +157,26 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
     if let Some(matches) = matches.subcommand_matches("game-versions") {
         let mut out = String::new();
         let snapshots = matches.get_flag("show-snapshots");
+        let historical = matches.get_flag("show-historical");
         for version in available_minecraft_versions {
-            if snapshots || version._type == "release" {
+            let mut displayed = if snapshots && historical {
+                true
+            } else {
+                version.is_release()
+            };
+            if !displayed && snapshots {
+                displayed |= version.is_snapshot();
+            }
+            if !displayed && historical {
+                displayed |= version.is_historical();
+            }
+            if displayed {
                 out += &(version.id.clone() + " ");
             }
         }
         writeln!(std::io::stdout(), "Available Minecraft versions:\n")?;
         writeln!(std::io::stdout(), "{}", out)?;
-        return Ok(());
+        return Ok(InstallationResult::NotInstalled);
     }
 
     let loader_versions = crate::net::meta::fetch_loader_versions().await?;
@@ -159,14 +188,15 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
         let loader_version = get_loader_version(matches, loader_versions)?;
         let location = matches.get_one::<PathBuf>("dir").unwrap().clone();
         let create_profile = matches.get_flag("generate-profile");
-        return crate::actions::client::install(
+        crate::actions::client::install(
             minecraft_version,
             loader_type,
             loader_version,
             location,
             create_profile,
         )
-        .await;
+        .await?;
+        return Ok(InstallationResult::Installed);
     }
 
     if let Some(matches) = matches.subcommand_matches("server") {
@@ -178,7 +208,7 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
         if let Some(matches) = matches.subcommand_matches("run") {
             let java = matches.get_one::<PathBuf>("java");
             let run_args = matches.get_one::<String>("args");
-            return crate::actions::server::install_and_run(
+            crate::actions::server::install_and_run(
                 minecraft_version,
                 loader_type,
                 loader_version,
@@ -186,16 +216,18 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
                 java,
                 run_args.map(|s| s.split(" ")),
             )
-            .await;
+            .await?;
+            return Ok(InstallationResult::Installed);
         }
-        return crate::actions::server::install(
+        crate::actions::server::install(
             minecraft_version,
             loader_type,
             loader_version,
             location,
             matches.get_flag("download-minecraft"),
         )
-        .await;
+        .await?;
+        return Ok(InstallationResult::Installed);
     }
 
     if let Some(matches) = matches.subcommand_matches("mmc") {
@@ -209,7 +241,7 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
             .unwrap()
             .clone();
         let generate_zip = matches.get_one::<bool>("generate-zip").unwrap().clone();
-        return crate::actions::mmc_pack::install(
+        crate::actions::mmc_pack::install(
             minecraft_version,
             loader_type,
             loader_version,
@@ -217,10 +249,11 @@ async fn parse(matches: ArgMatches) -> Result<(), InstallerError> {
             copy_profile_path,
             generate_zip,
         )
-        .await;
+        .await?;
+        return Ok(InstallationResult::Installed);
     }
 
-    Ok(())
+    Ok(InstallationResult::NotInstalled)
 }
 
 fn get_minecraft_version(

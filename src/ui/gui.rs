@@ -82,6 +82,7 @@ struct App {
     available_minecraft_versions: Vec<MinecraftVersion>,
     available_intermediary_versions: Vec<String>,
     show_snapshots: bool,
+    show_historical: bool,
     selected_loader_type: LoaderType,
     selected_loader_version: String,
     available_loader_versions: HashMap<LoaderType, Vec<LoaderVersion>>,
@@ -138,6 +139,7 @@ impl App {
             available_minecraft_versions,
             available_intermediary_versions,
             show_snapshots: false,
+            show_historical: false,
             selected_loader_type: LoaderType::Fabric,
             selected_loader_version: available_loader_versions
                 .get(&LoaderType::Fabric)
@@ -223,7 +225,19 @@ impl App {
                                         }),
                                 )
                         })
-                        .filter(|v| self.show_snapshots || v._type == "release")
+                        .filter(|v| {
+                            if self.show_snapshots && self.show_historical {
+                                return true;
+                            }
+                            let mut displayed = v.is_release();
+                            if !displayed && self.show_snapshots {
+                                displayed = v.is_snapshot();
+                            }
+                            if !displayed && self.show_historical {
+                                displayed = v.is_historical();
+                            }
+                            displayed
+                        })
                         .map(|v| v.id.clone())
                         .collect::<Vec<String>>(),
                     "minecraft_version",
@@ -231,9 +245,11 @@ impl App {
                     |ui, text| ui.selectable_label(false, text),
                 )
                 .max_height(130.0)
+                .desired_width(170.0)
                 .hint_text("Search available versions..."),
             );
-            ui.checkbox(&mut self.show_snapshots, "Show Snapshots")
+            ui.checkbox(&mut self.show_snapshots, "Snapshots");
+            ui.checkbox(&mut self.show_historical, "Historical Versions");
         });
     }
 
@@ -291,8 +307,8 @@ impl App {
                     .get(&self.selected_loader_type)
                     .unwrap()
                     .iter()
+                    .filter(|v| self.show_betas || v.is_stable())
                     .map(|v| v.version.clone())
-                    .filter(|v| self.show_betas || !v.contains("-"))
                     .next()
                     .unwrap()
                     .clone();
