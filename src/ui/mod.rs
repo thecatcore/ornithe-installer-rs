@@ -41,7 +41,7 @@ pub fn dot_minecraft_location() -> String {
 #[cfg(target_os = "macos")]
 pub fn dot_minecraft_location() -> String {
     location(
-        home_dir().map(|p| p.join("Libary/Application Support/minecraft")),
+        home_dir().map(|p| p.join("Library/Application Support/minecraft")),
         "/",
     )
 }
