@@ -46,6 +46,7 @@ publishing {
     repositories {
         if (env["MAVEN_URL"] != null) {
             repositories.maven {
+                name = "Release"
                 url = uri(env["MAVEN_URL"]!!)
 
                 credentials {
@@ -53,8 +54,11 @@ publishing {
                     password = env["MAVEN_PASSWORD"]
                 }
             }
-        } else if (env["SNAPSHOTS_URL"] != null) {
+        }
+
+        if (env["SNAPSHOTS_URL"] != null) {
             repositories.maven {
+                name = "Snapshots"
                 url = uri(env["SNAPSHOTS_URL"]!!)
 
                 credentials {
