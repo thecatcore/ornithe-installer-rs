@@ -75,7 +75,7 @@ jobs:
       - if: matrix.build != 'macos-universal'
         run: dpkg --add-architecture ${{ matrix.arch }} && apt-get clean && apt-get update
       - if: matrix.build != 'macos-universal'
-        run: apt-get -yq --allow-unauthenticated --no-install-suggests --no-install-recommends libxcb-render0-dev:${{ matrix.arch }} libxcb-shape0-dev:${{ matrix.arch }} libxcb-xfixes0-dev:${{ matrix.arch }} libxkbcommon-dev:${{ matrix.arch }} libssl-dev:${{ matrix.arch }} libgtk-3-dev:${{ matrix.arch }} # libgtk-3-dev is used by rfd
+        run: apt-get -yq --allow-unauthenticated --no-install-suggests --no-install-recommends install libxcb-render0-dev:${{ matrix.arch }} libxcb-shape0-dev:${{ matrix.arch }} libxcb-xfixes0-dev:${{ matrix.arch }} libxkbcommon-dev:${{ matrix.arch }} libssl-dev:${{ matrix.arch }} libgtk-3-dev:${{ matrix.arch }} # libgtk-3-dev is used by rfd
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
