@@ -60,18 +60,25 @@ jobs:
             target: x86_64-unknown-linux-gnu
             build_target: x86_64-unknown-linux-gnu
             arch: amd64
+            ssl_arch: x86_64
           - build: linux-i686
             target: i686-unknown-linux-gnu
             build_target: i686-unknown-linux-gnu
             arch: i386
+            ssl_arch: i386
           - build: linux-aarch64
             target: aarch64-unknown-linux-gnu
             build_target: aarch64-unknown-linux-gnu
             arch: arm64
+            ssl_arch: aarch64
     runs-on: ubuntu-latest
     container: ghcr.io/rust-cross/cargo-zigbuild:0.20
     steps:
       - uses: actions/checkout@v4
+      - if: matrix.build != 'macos-universal'
+        run: ln -s /usr/include/${{ matrix.ssl_arch }}-linux-gnu/openssl/opensslconf.h /usr/include/openssl/opensslconf.h
+      - if: matrix.build != 'macos-universal'
+        run: ln -s /usr/include/${{ matrix.ssl_arch }}-linux-gnu/openssl/configuration.h /usr/include/openssl/configuration.h
       - if: matrix.build != 'macos-universal'
         run: dpkg --add-architecture ${{ matrix.arch }} && apt-get clean && apt-get update
       - if: matrix.build != 'macos-universal'
