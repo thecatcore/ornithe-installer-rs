@@ -67,7 +67,7 @@ jobs:
           - build: linux-i686
             target: aarch64-unknown-linux-gnu
             build_target: aarch64-unknown-linux-gnu
-            arch: aarch64
+            arch: arm64
     runs-on: ubuntu-latest
     container: ghcr.io/rust-cross/cargo-zigbuild:0.20
     steps:
