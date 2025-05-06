@@ -55,6 +55,8 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.build }}
       - run: rustup target add ${{ matrix.target }}
       - run: cargo build --release --target ${{ matrix.target }}
       - run: mv "target/${{ matrix.target }}/release/ornithe-installer-rs" "target/${{ matrix.target }}/release/ornithe-installer-rs.bin"
