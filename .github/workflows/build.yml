@@ -14,37 +14,38 @@ jobs:
   build:
     strategy:
       matrix:
-        build: [linux, windows, mac]
         include:
-          - build: linux
+          - build: linux-x86_64
             os: ubuntu-latest
-            rust: "stable"
-          - build: windows
-            os: windows-latest
-            rust: "stable"
-          - build: mac
-            os: macos-latest
-            rust: "stable"
+            target: x86_64-unknown-linux-gnu
+            package_arch: amd64
+            extra_package: ''
+          - build: linux-aarch64
+            os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            package_arch: arm64
+            extra_package: gcc-aarch64-linux-gnu libc6-dev-arm64-cross g++-aarch64-linux-gnu
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
+      - name: Setup package architecture (Linux)
+        if: runner.os == 'Linux'
+        run: dpkg --add-architecture ${{ matrix.linux_arch }} && apt-get clean && apt-get update
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
         uses: awalsh128/cache-apt-pkgs-action@v1.4.3
         with:
-          packages: libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libgtk-3-dev # libgtk-3-dev is used by rfd
+          packages: libxcb-render0-dev:${{ matrix.package_arch }} libxcb-shape0-dev:${{ matrix.package_arch }} libxcb-xfixes0-dev:${{ matrix.package_arch }} libxkbcommon-dev:${{ matrix.package_arch }} libssl-dev:${{ matrix.package_arch }} libgtk-3-dev:${{ matrix.package_arch }} ${{ matrix.extra_package }} # libgtk-3-dev is used by rfd
           version: 1.0
           execute_install_scripts: true
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: ${{ matrix.rust }}
+          toolchain: stable
       - uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: cargo build --verbose
-      - name: Build release binary
-        run: cargo build --release
+      - run: rustup target add ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
       - name: Upload a Build Artifact
         uses: actions/upload-artifact@v4
         with:
