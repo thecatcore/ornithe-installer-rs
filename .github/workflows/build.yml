@@ -30,12 +30,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup package architecture (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.package_arch != 'amd64'
         run: |
           sudo sed -i 's/deb http/deb [arch=amd64,i386] http/' /etc/apt/sources.list
           sudo grep "ubuntu.com/ubuntu" /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/ports.list
           sudo sed -i 's/amd64,i386/${{matrix.package_arch}}/' /etc/apt/sources.list.d/ports.list
-          sudo sed -i 's#http://.*/ubuntu#http://ports.ubuntu.com/ubuntu-ports#' /etc/apt/sources.list.d/ports.list
+          sudo sed -i 's#https://.*/ubuntu#https://ports.ubuntu.com/ubuntu-ports#' /etc/apt/sources.list.d/ports.list
           sudo dpkg --add-architecture ${{ matrix.package_arch }} && sudo apt-get clean && sudo apt-get update
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
