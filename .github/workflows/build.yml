@@ -35,8 +35,11 @@ jobs:
           sudo sed -i 's/deb http/deb [arch=amd64,i386] http/' /etc/apt/sources.list
           sudo grep "ubuntu.com/ubuntu" /etc/apt/sources.list | sudo tee /etc/apt/sources.list.d/ports.list
           sudo sed -i 's/amd64,i386/${{matrix.package_arch}}/' /etc/apt/sources.list.d/ports.list
+          sudo sed -i 's#http://.*/ubuntu#http://ports.ubuntu.com/ubuntu-ports#' /etc/apt/sources.list.d/ports.list
           sudo sed -i 's#https://.*/ubuntu#https://ports.ubuntu.com/ubuntu-ports#' /etc/apt/sources.list.d/ports.list
-          sudo dpkg --add-architecture ${{ matrix.package_arch }} && sudo apt-get clean && sudo apt-get update
+          sudo cat /etc/apt/sources.list.d/ports.list
+          sudo dpkg --add-architecture ${{ matrix.package_arch }}
+          sudo apt-get clean && sudo apt-get update
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
         uses: awalsh128/cache-apt-pkgs-action@v1.4.3
