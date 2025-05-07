@@ -32,14 +32,15 @@ jobs:
       - name: Setup package architecture (Linux)
         if: runner.os == 'Linux' && matrix.package_arch != 'amd64'
         run: |
-          sudo tee /etc/apt/sources.list.d/ports.sources
-          sudo echo "Types: deb" >> /etc/apt/sources.list.d/ports.sources
-          sudo echo "URIs: https://ports.ubuntu.com/ubuntu-ports/" >> /etc/apt/sources.list.d/ports.sources
-          sudo echo "Suites: noble noble-updates noble-security" >> /etc/apt/sources.list.d/ports.sources
-          sudo echo "Components: main restricted universe multiverse" >> /etc/apt/sources.list.d/ports.sources
-          sudo echo "Architectures: ${{matrix.package_arch}}" >> /etc/apt/sources.list.d/ports.sources
-          sudo echo "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" >> /etc/apt/sources.list.d/ports.sources
-          sudo dpkg --add-architecture ${{ matrix.package_arch }}
+          touch ports.sources
+          echo "Types: deb" >> ports.sources
+          echo "URIs: https://ports.ubuntu.com/ubuntu-ports/" >> ports.sources
+          echo "Suites: noble noble-updates noble-security" >> ports.sources
+          echo "Components: main restricted universe multiverse" >> ports.sources
+          echo "Architectures: ${{matrix.package_arch}}" >> ports.sources
+          echo "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" >> ports.sources
+          sudo mv ports.sources /etc/apt/sources.list.d/ports.sources
+          dpkg --add-architecture ${{ matrix.package_arch }}
           sudo apt-get clean && sudo apt-get update
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
