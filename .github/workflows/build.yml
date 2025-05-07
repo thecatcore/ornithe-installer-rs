@@ -40,7 +40,7 @@ jobs:
           echo "Architectures: ${{matrix.package_arch}}" >> ports.sources
           echo "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg" >> ports.sources
           sudo mv ports.sources /etc/apt/sources.list.d/ports.sources
-          dpkg --add-architecture ${{ matrix.package_arch }}
+          sudo dpkg --add-architecture ${{ matrix.package_arch }}
           sudo apt-get clean && sudo apt-get update
       - name: Install packages (Linux)
         if: runner.os == 'Linux'
