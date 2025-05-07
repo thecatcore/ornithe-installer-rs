@@ -32,7 +32,7 @@ jobs:
       - name: Setup package architecture 1 (Linux)
         if: runner.os == 'Linux' && matrix.package_arch != 'amd64'
         run: |
-          sudo sed -i 's/Signed/Architectures: amd64 i386\\\nSigned/' /etc/apt/sources.list.d/ubuntu.sources
+          sudo sed -i 's/Signed/Architectures: amd64 i386\nSigned/' /etc/apt/sources.list.d/ubuntu.sources
           sudo cat /etc/apt/sources.list.d/ubuntu.sources
       - name: Setup package architecture 2 (Linux)
         if: runner.os == 'Linux' && matrix.package_arch != 'amd64'
